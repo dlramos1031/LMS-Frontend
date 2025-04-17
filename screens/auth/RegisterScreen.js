@@ -16,6 +16,9 @@ import logo from '../../assets/logo.png';
 export default function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [idNumber, setIdNumber] = useState('');
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(-30)).current;
@@ -37,14 +40,16 @@ export default function RegisterScreen({ navigation }) {
 
   const handleRegister = async () => {
     try {
-      if (!email || !password) {
-        Alert.alert('Error', 'Email and password are required.');
+      if (!email || !password || !firstName || !lastName || !idNumber) {
+        Alert.alert('Error', 'All fields are required.');
         return;
       }
 
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         email,
+        name: `${firstName} ${lastName}`,
+        idNumber,
         createdAt: serverTimestamp(),
       });
 
@@ -56,7 +61,6 @@ export default function RegisterScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* Animated Logo */}
       <Animated.Image
         source={logo}
         style={[
@@ -71,6 +75,28 @@ export default function RegisterScreen({ navigation }) {
       <Text style={styles.title}>Create Account</Text>
       <Text style={styles.subtitle}>Sign up to get started</Text>
 
+      <TextInput
+        placeholder="First Name"
+        placeholderTextColor="#999"
+        style={styles.input}
+        onChangeText={setFirstName}
+        value={firstName}
+      />
+      <TextInput
+        placeholder="Last Name"
+        placeholderTextColor="#999"
+        style={styles.input}
+        onChangeText={setLastName}
+        value={lastName}
+      />
+      <TextInput
+        placeholder="ID Number"
+        placeholderTextColor="#999"
+        style={styles.input}
+        onChangeText={setIdNumber}
+        value={idNumber}
+        keyboardType="numeric"
+      />
       <TextInput
         placeholder="Email"
         placeholderTextColor="#999"

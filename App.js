@@ -7,17 +7,26 @@ import registerForPushNotificationsAsync from './utils/registerForPushNotificati
 
 export default function App() {
   useEffect(() => {
-    registerForPushNotificationsAsync().then(token => {
+    // Register for push notifications
+    const registerPushNotifications = async () => {
+      const token = await registerForPushNotificationsAsync();
       if (token) {
         console.log('Push token:', token);
       }
-    });
+    };
 
-    const subscription = Notifications.addNotificationReceivedListener(notification => {
+    registerPushNotifications();
+
+    // Listener for notification receipt
+    const notificationSubscription = Notifications.addNotificationReceivedListener(notification => {
       console.log('Notification received:', notification);
+      // Handle notification here, e.g., display an alert or update app state
     });
 
-    return () => subscription.remove();
+    // Cleanup: remove notification listener when the component unmounts
+    return () => {
+      notificationSubscription.remove();
+    };
   }, []);
 
   return (

@@ -22,7 +22,7 @@ export default function TabNavigator() {
           height: Platform.OS === 'ios' ? 80 : 65,
           paddingBottom: Platform.OS === 'ios' ? 20 : 10,
           paddingTop: 5,
-          backgroundColor: '#fff',
+          backgroundColor: '#f5f5f5',
           borderTopLeftRadius: 16,
           borderTopRightRadius: 16,
           elevation: 10,

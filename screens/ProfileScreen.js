@@ -149,7 +149,7 @@ export default function ProfileScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     padding: 50,
-    backgroundColor: '#1b263b',
+    backgroundColor: '#f0f0f0',
     flexGrow: 1,
   },
   avatarContainer: {
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#f8fafc',
+    color: '#111',
     marginTop: 10,
   },
   section: {
@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#cbd5e1',
+    color: '#111',
     marginBottom: 15,
   },
   inputGroup: {
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#cbd5e1',
+    color: '#111',
     marginBottom: 6,
   },
   input: {
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
     color: '#1e293b',
   },
   disabledInput: {
-    backgroundColor: '#e2e8f0',
+    backgroundColor: '#ffffff', // Set background color to white
     color: '#64748b',
   },
   saveBtn: {
@@ -230,11 +230,13 @@ const styles = StyleSheet.create({
   secondaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#94a3b8',
+    backgroundColor: '#ffffff', // Set background color to white
     padding: 14,
     borderRadius: 10,
     marginTop: 10,
     gap: 10,
+    borderWidth: 1,
+    borderColor: '#778da9', // Border color remains the same
   },
   secondaryText: {
     color: '#1e293b',

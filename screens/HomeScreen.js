@@ -18,28 +18,34 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [userName, setUserName] = useState('');
   const [loadingUser, setLoadingUser] = useState(true);
+  const [favorites, setFavorites] = useState([]);
+
+  
 
   const navigation = useNavigation();
 
   useEffect(() => {
-    const fetchUserName = async () => {
+    const fetchUserData = async () => {
       try {
         const uid = auth.currentUser?.uid;
         if (uid) {
-          const docRef = doc(db, 'users', uid);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            setUserName(docSnap.data().name || '');
+          const userRef = doc(db, 'users', uid);
+          const userSnap = await getDoc(userRef);
+
+          if (userSnap.exists()) {
+            const data = userSnap.data();
+            setUserName(data.name || '');
+            setFavorites(data.favorites || []); // Loading favorites
           }
         }
       } catch (error) {
-        console.error('Failed to fetch user name:', error);
+        console.error('Failed to fetch user data:', error);
       } finally {
         setLoadingUser(false);
       }
     };
 
-    fetchUserName();
+    fetchUserData();
   }, []);
 
   const handleBookPress = (book) => {
@@ -57,7 +63,9 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.greeting}>Welcome back, <Text style={styles.name}>{userName}</Text> 👋</Text>
+        <Text style={styles.greeting}>
+          Welcome back, <Text style={styles.name}>{userName}</Text> 👋
+        </Text>
 
         <View style={styles.searchContainer}>
           <Ionicons name="search-outline" size={20} color="#999" style={styles.searchIcon} />
@@ -83,16 +91,29 @@ export default function HomeScreen() {
           </View>
         ) : (
           <>
+            {/* 🧡 Favorites Section */}
+            {favorites.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.heading}>
+                  <MaterialCommunityIcons name="heart-outline" size={18} color="#555" /> Favorites
+                </Text>
+                <BookCarousel
+                  filter="favorites"
+                  favoriteIds={favorites}  // Pass favorites list to BookCarousel
+                  onBookPress={handleBookPress}
+                />
+              </View>
+            )}
+
+            {/* 🎯 Recommended Section */}
             <View style={styles.section}>
               <Text style={styles.heading}>
                 <MaterialCommunityIcons name="star-outline" size={18} color="#555" /> Recommended
               </Text>
-              <BookCarousel
-                filter="recommended"
-                onBookPress={handleBookPress}
-              />
+              <BookCarousel filter="recommended" onBookPress={handleBookPress} />
             </View>
 
+            {/* 🔖 Genre Sections */}
             <GenreSection icon="book-open-page-variant" label="Comics" query="comics" onBookPress={handleBookPress} />
             <GenreSection icon="school-outline" label="Educational" query="educational" onBookPress={handleBookPress} />
             <GenreSection icon="feather" label="Fictions" query="fictions" onBookPress={handleBookPress} />
@@ -159,4 +180,4 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     color: '#444',
   },
-});
+});  

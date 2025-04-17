@@ -5,7 +5,7 @@ import { db } from '../config/firebase';
 
 const { width } = Dimensions.get('window');
 
-export default function BookCarousel({ filter, queryText, onBookPress }) {
+export default function BookCarousel({ filter, queryText, favoriteIds = [], onBookPress }) {
   const [books, setBooks] = useState([]);
 
   useEffect(() => {
@@ -16,7 +16,10 @@ export default function BookCarousel({ filter, queryText, onBookPress }) {
 
         let filteredBooks = [];
 
-        if (filter === 'search' && queryText) {
+        if (filter === 'favorites') {
+          // Only show books that are in the favorites list
+          filteredBooks = allBooks.filter(book => favoriteIds.includes(book.id));
+        } else if (filter === 'search' && queryText) {
           const lower = queryText.toLowerCase();
           filteredBooks = allBooks.filter(book =>
             book.title?.toLowerCase().includes(lower) ||
@@ -27,9 +30,10 @@ export default function BookCarousel({ filter, queryText, onBookPress }) {
           filteredBooks = allBooks.filter(
             book => book.genre?.toLowerCase() === queryText.toLowerCase()
           );
+        } else if (filter === 'recommended') {
+          filteredBooks = allBooks.slice(0, 10); // Adjust as needed
         } else {
-          // default: show all books
-          filteredBooks = allBooks;
+          filteredBooks = allBooks; // Default: show all books
         }
 
         setBooks(filteredBooks);
@@ -39,7 +43,7 @@ export default function BookCarousel({ filter, queryText, onBookPress }) {
     };
 
     fetchBooks();
-  }, [filter, queryText]);
+  }, [filter, queryText, favoriteIds]); // Ensure it updates when favorites change
 
   const renderItem = ({ item }) => (
     <TouchableOpacity style={styles.card} onPress={() => onBookPress(item)}>
