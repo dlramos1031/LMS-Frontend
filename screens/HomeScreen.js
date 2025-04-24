@@ -20,8 +20,6 @@ export default function HomeScreen() {
   const [loadingUser, setLoadingUser] = useState(true);
   const [favorites, setFavorites] = useState([]);
 
-  
-
   const navigation = useNavigation();
 
   useEffect(() => {
@@ -35,7 +33,7 @@ export default function HomeScreen() {
           if (userSnap.exists()) {
             const data = userSnap.data();
             setUserName(data.name || '');
-            setFavorites(data.favorites || []); // Loading favorites
+            setFavorites(data.favorites || []);
           }
         }
       } catch (error) {
