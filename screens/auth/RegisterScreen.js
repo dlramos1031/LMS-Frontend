@@ -1,4 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+// Frontend/screens/auth/RegisterScreen.js
+
+import React, { useState, useEffect, useRef, useContext } // Added useContext
+from 'react';
 import {
   View,
   Text,
@@ -7,19 +10,29 @@ import {
   StyleSheet,
   Alert,
   Animated,
+  ActivityIndicator, // Added ActivityIndicator
+  ScrollView // Added ScrollView
 } from 'react-native';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../../config/firebase';
+// Removed: import { createUserWithEmailAndPassword } from 'firebase/auth';
+// Removed: import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+// Removed: import { auth, db } from '../../config/firebase';
+import { AuthContext } from '../../navigation/AuthProvider'; // Import AuthContext
 import logo from '../../assets/logo.png';
 
 export default function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState(''); // Added confirm password state
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [idNumber, setIdNumber] = useState('');
+  // const [idNumber, setIdNumber] = useState(''); // Keep if needed locally, but won't be sent to current API
 
+  const [isSubmitting, setIsSubmitting] = useState(false); // Local loading state
+
+  // Get register function and global loading state from AuthContext
+  const { register, loading: authLoading } = useContext(AuthContext);
+
+  // --- Animation code remains the same ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(-30)).current;
 
@@ -37,115 +50,168 @@ export default function RegisterScreen({ navigation }) {
       }),
     ]).start();
   }, []);
+  // --- End of animation code ---
 
   const handleRegister = async () => {
+    // Basic Client-side validation
+    if (!email || !password || !confirmPassword || !firstName || !lastName) {
+      Alert.alert('Error', 'Please fill in all required fields.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match.');
+      return;
+    }
+
+    // Prepare data for Django API
+    // Using email as username for consistency with login
+    const registrationData = {
+      username: email, // Sending email as username
+      email: email,
+      password: password,
+      confirm_password: confirmPassword,
+      full_name: `${firstName} ${lastName}`,
+    };
+
+    setIsSubmitting(true);
     try {
-      if (!email || !password || !firstName || !lastName || !idNumber) {
-        Alert.alert('Error', 'All fields are required.');
-        return;
-      }
-
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      await setDoc(doc(db, 'users', userCredential.user.uid), {
-        email,
-        name: `${firstName} ${lastName}`,
-        idNumber,
-        createdAt: serverTimestamp(),
-      });
-
-      Alert.alert('Success', 'Account created!');
+      await register(registrationData);
+      // Registration successful, AuthProvider handles login state
+      // Navigation is handled by RootNavigator automatically
     } catch (error) {
-      Alert.alert('Registration Failed', error.message);
+        // Handle registration errors from the backend
+        let errorMessage = 'Registration failed. Please try again.';
+        if (error.response?.data) {
+            // Extract specific field errors from Django REST Framework response
+            const errors = error.response.data;
+            const errorMessages = Object.keys(errors).map(key => `${key}: ${errors[key].join(', ')}`);
+            if (errorMessages.length > 0) {
+                errorMessage = errorMessages.join('\n');
+            } else if (errors.detail) {
+                 errorMessage = errors.detail;
+            }
+        } else if (error.message) {
+            errorMessage = error.message; // Handle network or other errors
+        }
+        Alert.alert('Registration Failed', errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Animated.Image
-        source={logo}
-        style={[
-          styles.logo,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
-      />
+    // Use ScrollView to prevent content being hidden by keyboard
+    <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+        <View style={styles.innerContainer}>
+        <Animated.Image
+            source={logo}
+            style={[
+            styles.logo,
+            {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+            },
+            ]}
+        />
 
-      <Text style={styles.title}>Create Account</Text>
-      <Text style={styles.subtitle}>Sign up to get started</Text>
+        <Text style={styles.title}>Create Account</Text>
+        <Text style={styles.subtitle}>Sign up to get started</Text>
 
-      <TextInput
-        placeholder="First Name"
-        placeholderTextColor="#999"
-        style={styles.input}
-        onChangeText={setFirstName}
-        value={firstName}
-      />
-      <TextInput
-        placeholder="Last Name"
-        placeholderTextColor="#999"
-        style={styles.input}
-        onChangeText={setLastName}
-        value={lastName}
-      />
-      <TextInput
-        placeholder="ID Number"
-        placeholderTextColor="#999"
-        style={styles.input}
-        onChangeText={setIdNumber}
-        value={idNumber}
-        keyboardType="numeric"
-      />
-      <TextInput
-        placeholder="Email"
-        placeholderTextColor="#999"
-        style={styles.input}
-        onChangeText={setEmail}
-        value={email}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-      <TextInput
-        placeholder="Password"
-        placeholderTextColor="#999"
-        secureTextEntry
-        style={styles.input}
-        onChangeText={setPassword}
-        value={password}
-      />
+        {/* Input fields */}
+        <TextInput
+            placeholder="First Name"
+            placeholderTextColor="#999"
+            style={styles.input}
+            onChangeText={setFirstName}
+            value={firstName}
+        />
+        <TextInput
+            placeholder="Last Name"
+            placeholderTextColor="#999"
+            style={styles.input}
+            onChangeText={setLastName}
+            value={lastName}
+        />
+        {/* idNumber field removed from API call, keep input if needed for other purposes */}
+        {/* <TextInput
+            placeholder="ID Number (Optional)"
+            placeholderTextColor="#999"
+            style={styles.input}
+            onChangeText={setIdNumber}
+            value={idNumber}
+            keyboardType="numeric"
+        /> */}
+        <TextInput
+            placeholder="Email (will be used as username)"
+            placeholderTextColor="#999"
+            style={styles.input}
+            onChangeText={setEmail}
+            value={email}
+            autoCapitalize="none"
+            keyboardType="email-address"
+        />
+        <TextInput
+            placeholder="Password"
+            placeholderTextColor="#999"
+            secureTextEntry
+            style={styles.input}
+            onChangeText={setPassword}
+            value={password}
+        />
+        {/* Added Confirm Password Input */}
+        <TextInput
+            placeholder="Confirm Password"
+            placeholderTextColor="#999"
+            secureTextEntry
+            style={styles.input}
+            onChangeText={setConfirmPassword}
+            value={confirmPassword}
+        />
 
-      <TouchableOpacity style={styles.button} onPress={handleRegister}>
-        <Text style={styles.buttonText}>Register</Text>
-      </TouchableOpacity>
-
-      <View style={styles.loginContainer}>
-        <Text style={styles.loginText}>Already have an account? </Text>
-        <TouchableOpacity onPress={() => navigation.canGoBack() && navigation.goBack()}>
-          <Text style={styles.loginLink}>Login</Text>
+        {/* Updated Register Button */}
+        <TouchableOpacity
+            style={[styles.button, (isSubmitting || authLoading) && styles.buttonDisabled]}
+            onPress={handleRegister}
+            disabled={isSubmitting || authLoading}
+        >
+            {isSubmitting || authLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+            ) : (
+            <Text style={styles.buttonText}>Register</Text>
+            )}
         </TouchableOpacity>
-      </View>
-    </View>
+
+        <View style={styles.loginContainer}>
+            <Text style={styles.loginText}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.canGoBack() && navigation.goBack()}>
+            <Text style={styles.loginLink}>Login</Text>
+            </TouchableOpacity>
+        </View>
+        </View>
+    </ScrollView>
   );
 }
 
+// Updated Styles
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
+  scrollContainer: {
+    flexGrow: 1, // Ensures content can scroll if needed
     justifyContent: 'center',
+  },
+  innerContainer: { // Renamed container to innerContainer
+    padding: 24,
     backgroundColor: '#f5f7fa',
   },
   logo: {
-    width: 120,
-    height: 120,
+    width: 100, // Slightly smaller logo
+    height: 100,
     resizeMode: 'contain',
     alignSelf: 'center',
-    marginBottom: 20,
-    marginTop: -20,
+    marginBottom: 15, // Adjusted margin
+    // marginTop: -20, // Removed negative margin
   },
   title: {
-    fontSize: 30,
+    fontSize: 28, // Adjusted size
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 8,
@@ -155,26 +221,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 25, // Adjusted margin
   },
   input: {
     backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 16,
-    fontSize: 16,
+    paddingVertical: 12, // Adjusted padding
+    paddingHorizontal: 14,
+    borderRadius: 10, // Slightly smaller radius
+    marginBottom: 14, // Adjusted margin
+    fontSize: 15, // Adjusted size
     borderWidth: 1,
     borderColor: '#ddd',
   },
   button: {
     backgroundColor: '#1976d2',
     paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 8,
+    borderRadius: 10,
+    marginTop: 10, // Adjusted margin
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 2,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 48, // Adjusted height
+  },
+  buttonDisabled: {
+    backgroundColor: '#a0c3e2',
   },
   buttonText: {
     color: '#fff',
@@ -185,7 +259,7 @@ const styles = StyleSheet.create({
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 30,
+    marginTop: 25, // Adjusted margin
   },
   loginText: {
     color: '#555',
