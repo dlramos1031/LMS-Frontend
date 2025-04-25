@@ -1,23 +1,21 @@
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import React, { useContext } from 'react';
+import { View, ActivityIndicator } from 'react-native'; 
+import { AuthContext } from './AuthProvider'; 
 import AuthStack from './AuthStack';
 import MainStack from './MainStack';
-import { useEffect, useState } from 'react';
 
 export default function RootNavigator() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { token, loading } = useContext(AuthContext); 
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, user => {
-      setUser(user);
-      setLoading(false);
-    });
-    return unsubscribe;
-  }, []);
+  if (loading) {
+    // Show a loading spinner while checking auth state
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
-  if (loading) return null;
-
-  return user ? <MainStack /> : <AuthStack />;
-  
+  // Render MainStack if token exists, otherwise AuthStack
+  return token ? <MainStack /> : <AuthStack />;
 }
