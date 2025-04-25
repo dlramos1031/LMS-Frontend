@@ -1,4 +1,7 @@
-import React, { useEffect, useState } from 'react';
+// Frontend/screens/ProfileScreen.js
+
+import React, { useEffect, useState, useContext } // Added useContext
+from 'react';
 import {
   View,
   Text,
@@ -10,44 +13,72 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { auth, db } from '../config/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+// Removed: import { auth, db } from '../config/firebase';
+// Removed: import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { AuthContext } from '../navigation/AuthProvider'; // Import AuthContext
+
+// ---- TEMPORARY: Keep Firebase imports for profile data until Step 5 ----
+import { auth, db } from '../config/firebase'; // Keep temporarily
+import { doc, getDoc, updateDoc } from 'firebase/firestore'; // Keep temporarily
+// ---- END TEMPORARY ----
 
 export default function ProfileScreen({ navigation }) {
   const [profile, setProfile] = useState({ name: '', idNumber: '', email: '' });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true); // Loading state for profile fetch
+  const [saving, setSaving] = useState(false); // Saving state for profile update
 
+  // Get logout function from AuthContext
+  const { logout } = useContext(AuthContext); // Get logout from context
+
+  // ---- TEMPORARY: useEffect still uses Firebase ----
   useEffect(() => {
     const fetchUserProfile = async () => {
-      const user = auth.currentUser;
+      setLoading(true); // Start loading
+      const user = auth.currentUser; // Still uses Firebase auth temporarily
       if (user) {
         const docRef = doc(db, 'users', user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setProfile({ ...docSnap.data(), email: user.email });
+        try {
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            // Use user.email from Firebase auth object, others from Firestore
+            setProfile({ ...docSnap.data(), email: user.email || '' });
+          } else {
+             // Set email even if profile doc doesn't exist yet
+             setProfile({ name: '', idNumber: '', email: user.email || '' });
+          }
+        } catch (error) {
+            console.error("Error fetching profile:", error);
+            // Set email even on error
+            setProfile({ name: '', idNumber: '', email: user.email || '' });
         }
       }
-      setLoading(false);
+      setLoading(false); // Finish loading
     };
 
     fetchUserProfile();
   }, []);
+  // ---- END TEMPORARY ----
 
+
+  // ---- TEMPORARY: handleSave still uses Firebase ----
   const handleSave = async () => {
-    const user = auth.currentUser;
-    if (!profile.name || !profile.idNumber) {
-      Alert.alert('Validation Error', 'Please enter all fields');
+    const user = auth.currentUser; // Still uses Firebase auth temporarily
+    if (!user) return; // Make sure user is available
+
+    if (!profile.name) { // Simplified validation
+      Alert.alert('Validation Error', 'Please enter your full name');
       return;
     }
 
     try {
       setSaving(true);
       const docRef = doc(db, 'users', user.uid);
-      await updateDoc(docRef, {
-        name: profile.name,
-        idNumber: profile.idNumber,
-      });
+      // Prepare data, excluding email as it's not editable here
+      const dataToSave = {
+          name: profile.name,
+          idNumber: profile.idNumber || '', // Save idNumber or empty string
+      };
+      await updateDoc(docRef, dataToSave); // Consider using setDoc with merge:true if doc might not exist
       Alert.alert('Success', 'Profile updated successfully');
     } catch (error) {
       Alert.alert('Error', error.message);
@@ -55,16 +86,23 @@ export default function ProfileScreen({ navigation }) {
       setSaving(false);
     }
   };
+  // ---- END TEMPORARY ----
 
+  // Updated handleLogout function
   const handleLogout = async () => {
     try {
-      await auth.signOut();
+      await logout(); // Call logout from AuthContext
+      // Navigation is handled by RootNavigator automatically
     } catch (error) {
-      Alert.alert('Logout Error', error.message);
+      // AuthProvider's logout function already logs errors,
+      // but you could add specific UI feedback here if needed.
+      Alert.alert('Logout Error', 'An error occurred during logout.');
+      console.error('Logout error in ProfileScreen:', error);
     }
   };
 
-  if (loading) {
+
+  if (loading && !profile.email) { // Show loader only on initial load without data
     return <ActivityIndicator size="large" style={{ flex: 1, justifyContent: 'center' }} />;
   }
 
@@ -72,7 +110,8 @@ export default function ProfileScreen({ navigation }) {
     <ScrollView contentContainerStyle={styles.container}>
       {/* Avatar Section */}
       <View style={styles.avatarContainer}>
-        <TouchableOpacity onPress={() => Alert.alert('Profile picture feature coming soon')}>
+         {/* Avatar rendering remains the same */}
+         <TouchableOpacity onPress={() => Alert.alert('Profile picture feature coming soon')}>
           <View style={styles.avatarMock}>
             <Text style={styles.avatarEmoji}>👤</Text>
             <View style={styles.editIcon}>
@@ -87,6 +126,7 @@ export default function ProfileScreen({ navigation }) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Basic Info</Text>
 
+        {/* Inputs remain the same for now */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Full Name</Text>
           <TextInput
@@ -104,7 +144,7 @@ export default function ProfileScreen({ navigation }) {
             style={styles.input}
             value={profile.idNumber}
             onChangeText={(text) => setProfile({ ...profile, idNumber: text })}
-            placeholder="Enter your student ID"
+            placeholder="Enter your student ID (Optional)" // Marked as optional
             placeholderTextColor="#94a3b8"
           />
         </View>
@@ -113,13 +153,14 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.label}>Email (read-only)</Text>
           <TextInput
             style={[styles.input, styles.disabledInput]}
-            value={profile.email}
+            value={profile.email} // Display email from state
             editable={false}
           />
         </View>
 
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
-          <Text style={styles.saveText}>{saving ? 'Saving...' : 'Save Changes'}</Text>
+        {/* Save button remains the same for now */}
+        <TouchableOpacity style={[styles.saveBtn, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
+           {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveText}>Save Changes</Text> }
         </TouchableOpacity>
       </View>
 
@@ -127,6 +168,7 @@ export default function ProfileScreen({ navigation }) {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
 
+        {/* Other buttons remain the same */}
         <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.navigate('About')}>
           <Ionicons name="information-circle-outline" size={18} color="#1e293b" />
           <Text style={styles.secondaryText}>About</Text>
@@ -137,6 +179,7 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.secondaryText}>Settings</Text>
         </TouchableOpacity>
 
+        {/* Updated Logout Button */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={20} color="#fff" />
           <Text style={styles.logoutText}>Log Out</Text>
@@ -146,10 +189,12 @@ export default function ProfileScreen({ navigation }) {
   );
 }
 
+// Styles remain largely the same, added disabled style for save button
 const styles = StyleSheet.create({
   container: {
-    padding: 50,
-    backgroundColor: '#f0f0f0',
+    paddingVertical: 40, // Adjusted padding
+    paddingHorizontal: 24,
+    backgroundColor: '#f8fafc', // Slightly lighter background
     flexGrow: 1,
   },
   avatarContainer: {
@@ -160,102 +205,124 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#415a77',
+    backgroundColor: '#e2e8f0', // Lighter background for mock
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
-    borderColor: '#778da9',
+    borderColor: '#cbd5e1', // Lighter border
     position: 'relative',
   },
   editIcon: {
     position: 'absolute',
-    bottom: -4,
-    right: -4,
+    bottom: 0, // Adjusted position
+    right: 0,
     backgroundColor: '#3b82f6',
-    borderRadius: 10,
-    padding: 4,
+    borderRadius: 12, // Make it rounder
+    padding: 5,
+    borderWidth: 2,
+    borderColor: '#f8fafc',
   },
   avatarEmoji: {
     fontSize: 42,
   },
   username: {
-    fontSize: 20,
+    fontSize: 22, // Larger username
     fontWeight: '600',
-    color: '#111',
-    marginTop: 10,
+    color: '#1e293b', // Darker text
+    marginTop: 12,
   },
   section: {
     marginBottom: 30,
+    backgroundColor: '#ffffff', // Add background to sections
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: {
+        width: 0,
+        height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2.22,
+    elevation: 3,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111',
-    marginBottom: 15,
+    fontWeight: '600', // Slightly less bold
+    color: '#334155', // Adjusted color
+    marginBottom: 20, // More space after title
+    paddingBottom: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
   },
   inputGroup: {
-    marginBottom: 15,
+    marginBottom: 18, // More space between inputs
   },
   label: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111',
-    marginBottom: 6,
+    fontSize: 14, // Slightly smaller label
+    fontWeight: '500', // Medium weight
+    color: '#475569', // Adjusted color
+    marginBottom: 8, // More space after label
   },
   input: {
     borderWidth: 1,
-    borderColor: '#778da9',
-    borderRadius: 10,
+    borderColor: '#cbd5e1', // Lighter border
+    borderRadius: 8,
     padding: 12,
     fontSize: 16,
     backgroundColor: '#f8fafc',
     color: '#1e293b',
   },
   disabledInput: {
-    backgroundColor: '#ffffff', // Set background color to white
+    backgroundColor: '#e2e8f0', // Different background for disabled
     color: '#64748b',
   },
   saveBtn: {
     backgroundColor: '#3b82f6',
-    padding: 15,
-    borderRadius: 10,
+    paddingVertical: 14, // Adjusted padding
+    borderRadius: 8,
     alignItems: 'center',
     marginTop: 10,
+    flexDirection: 'row', // For loader alignment
+    justifyContent: 'center',
+    minHeight: 48,
   },
   saveText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600', // Bold text
   },
   secondaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff', // Set background color to white
+    backgroundColor: '#f1f5f9', // Lighter background for secondary buttons
     padding: 14,
-    borderRadius: 10,
-    marginTop: 10,
-    gap: 10,
+    borderRadius: 8,
+    marginTop: 12, // More space
+    gap: 12, // More gap
     borderWidth: 1,
-    borderColor: '#778da9', // Border color remains the same
+    borderColor: '#e2e8f0',
   },
   secondaryText: {
-    color: '#1e293b',
+    color: '#334155', // Darker text
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '500', // Medium weight
   },
   logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ef4444',
-    padding: 15,
-    borderRadius: 10,
-    marginTop: 20,
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginTop: 15,
     justifyContent: 'center',
     gap: 10,
   },
   logoutText: {
     color: '#fff',
-    fontWeight: 'bold',
+    fontWeight: '600',
     fontSize: 16,
+  },
+   buttonDisabled: { // Style for disabled save button
+    backgroundColor: '#93c5fd', // Lighter blue
   },
 });
