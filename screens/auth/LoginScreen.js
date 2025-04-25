@@ -1,4 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+// Frontend/screens/auth/LoginScreen.js
+
+import React, { useState, useEffect, useRef, useContext } // Added useContext
+from 'react';
 import {
   View,
   Text,
@@ -7,15 +10,22 @@ import {
   StyleSheet,
   Alert,
   Animated,
+  ActivityIndicator // Added ActivityIndicator
 } from 'react-native';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../../config/firebase';
+// Removed: import { signInWithEmailAndPassword } from 'firebase/auth';
+// Removed: import { auth } from '../../config/firebase';
+import { AuthContext } from '../../navigation/AuthProvider'; // Import AuthContext
 import logo from '../../assets/logo.png';
 
 export default function LoginScreen({ navigation }) {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(''); // Assuming email is used as username for login
   const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false); // Local loading state for button
 
+  // Get login function and global loading state from AuthContext
+  const { login, loading: authLoading } = useContext(AuthContext);
+
+  // --- Animation code remains the same ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(-30)).current;
 
@@ -33,12 +43,28 @@ export default function LoginScreen({ navigation }) {
       }),
     ]).start();
   }, []);
+  // --- End of animation code ---
 
   const handleLogin = async () => {
+    if (!email || !password) {
+        Alert.alert('Error', 'Please enter both email (username) and password.');
+        return;
+    }
+
+    setIsSubmitting(true); // Start local loading
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      // Use the login function from AuthContext
+      // We send the 'email' state as the 'username' parameter expected by Django
+      await login(email, password);
+      // Navigation is handled by RootNavigator automatically when the token state changes
     } catch (error) {
-      Alert.alert('Login Failed', error.message);
+      // Handle login errors (e.g., invalid credentials) shown to the user
+      const errorMessage = error.response?.data?.non_field_errors?.[0] || // Django standard non-field error
+                         error.response?.data?.detail || // DRF detail error
+                         'Login failed. Please check your credentials.'; // Generic fallback
+      Alert.alert('Login Failed', errorMessage);
+    } finally {
+      setIsSubmitting(false); // Stop local loading
     }
   };
 
@@ -60,13 +86,13 @@ export default function LoginScreen({ navigation }) {
       <Text style={styles.subtitle}>Log in to your account</Text>
 
       <TextInput
-        placeholder="Email"
+        placeholder="Email (as Username)" // Clarified placeholder
         placeholderTextColor="#999"
         style={styles.input}
         onChangeText={setEmail}
         value={email}
         autoCapitalize="none"
-        keyboardType="email-address"
+        keyboardType="email-address" // Keep email type for convenience
       />
       <TextInput
         placeholder="Password"
@@ -77,8 +103,17 @@ export default function LoginScreen({ navigation }) {
         secureTextEntry
       />
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
+      {/* Updated Login Button */}
+      <TouchableOpacity
+        style={[styles.button, (isSubmitting || authLoading) && styles.buttonDisabled]} // Disable button when loading
+        onPress={handleLogin}
+        disabled={isSubmitting || authLoading} // Disable button when loading
+      >
+        {isSubmitting || authLoading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Login</Text>
+        )}
       </TouchableOpacity>
 
       <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
@@ -141,6 +176,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 2,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 50,
+  },
+   buttonDisabled: {
+    backgroundColor: '#a0c3e2',
   },
   buttonText: {
     color: '#fff',
