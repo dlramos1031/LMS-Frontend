@@ -5,31 +5,62 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
-  StyleSheet
+  StyleSheet,
+  ActivityIndicator
 } from 'react-native';
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../../config/firebase';
+import apiClient from '../../services/apiClient'; 
 
 export default function ForgotPasswordScreen({ navigation }) {
   const [email, setEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false); // Local loading state
 
   const handleReset = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Please enter your email address.');
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
-      if (!email) {
-        Alert.alert('Error', 'Please enter your email.');
-        return;
-      }
+      // Call the Django backend endpoint provided by django-rest-passwordreset
+      const response = await apiClient.post('/auth/password_reset/', { email });
 
-      await sendPasswordResetEmail(auth, email);
-      Alert.alert('Success', 'Check your email for a reset link.');
-
-      // Safe navigation (only go back if possible)
-      if (navigation.canGoBack()) {
-        navigation.goBack(); // Goes back to login if from AuthStack
+      // Check for successful response (django-rest-passwordreset usually returns 200 OK)
+      if (response.status === 200) {
+          Alert.alert(
+            'Success',
+            'If an account with that email exists, a password reset link has been sent.'
+          );
+          if (navigation.canGoBack()) {
+            navigation.goBack(); // Go back to login screen
+          }
+      } else {
+          // Handle unexpected successful status codes if necessary
+           Alert.alert('Notice', response.data?.detail || 'Request processed.');
       }
 
     } catch (error) {
-      Alert.alert('Error', error.message);
+        // Handle errors (e.g., validation errors, server issues)
+        let errorMessage = 'Failed to send reset link. Please try again.';
+         if (error.response?.data) {
+            const errors = error.response.data;
+            // Extract specific field errors or detail message
+             if (errors.email && Array.isArray(errors.email)) {
+                 errorMessage = `Email: ${errors.email.join(', ')}`;
+             } else if (errors.detail) {
+                 errorMessage = errors.detail;
+             } else {
+                 // Handle non-field errors or other formats if needed
+                 const errorMessages = Object.keys(errors).map(key => `${key}: ${errors[key]}`);
+                 if(errorMessages.length > 0) errorMessage = errorMessages.join('\n');
+             }
+        } else if(error.message) {
+            errorMessage = error.message;
+        }
+        Alert.alert('Error', errorMessage);
+        console.error('Password Reset Error:', error.response || error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -50,8 +81,17 @@ export default function ForgotPasswordScreen({ navigation }) {
         keyboardType="email-address"
       />
 
-      <TouchableOpacity style={styles.button} onPress={handleReset}>
-        <Text style={styles.buttonText}>Send Reset Link</Text>
+      {/* Updated Button */}
+      <TouchableOpacity
+        style={[styles.button, isSubmitting && styles.buttonDisabled]}
+        onPress={handleReset}
+        disabled={isSubmitting}
+      >
+        {isSubmitting ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Send Reset Link</Text>
+        )}
       </TouchableOpacity>
 
       <TouchableOpacity onPress={() => navigation.canGoBack() && navigation.goBack()}>
@@ -61,6 +101,7 @@ export default function ForgotPasswordScreen({ navigation }) {
   );
 }
 
+// Styles updated slightly
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -99,6 +140,13 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
     marginBottom: 20,
+    flexDirection: 'row', // For indicator alignment
+    justifyContent: 'center', // For indicator alignment
+    alignItems: 'center', // For indicator alignment
+    minHeight: 50, // Ensure height for indicator
+  },
+  buttonDisabled: {
+    backgroundColor: '#a0c3e2', // Lighter color when disabled
   },
   buttonText: {
     color: '#fff',
