@@ -1,146 +1,263 @@
-import React, { useState, useEffect } from 'react';
+// Frontend/screens/BorrowScreen.js
+
+import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Platform,
+  Alert,
+  ActivityIndicator,
+  ScrollView
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useNavigation } from '@react-navigation/native';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db, auth } from '../config/firebase';
+import { useNavigation, useRoute } from '@react-navigation/native'; 
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
+import apiClient from '../services/apiClient';
+import { AuthContext } from '../navigation/AuthProvider'; 
+import { Ionicons } from '@expo/vector-icons';
 
-export default function BorrowScreen({ route }) {
-  const { book } = route.params;
+// Helper function to format date to YYYY-MM-DD
+const formatDate = (date) => {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = (`0${d.getMonth() + 1}`).slice(-2); // Months are 0-indexed
+  const day = (`0${d.getDate()}`).slice(-2);
+  return `${year}-${month}-${day}`;
+};
+
+export default function BorrowScreen() {
+  const route = useRoute(); // Use hook to get route params
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets(); // Get safe area insets
+  const { token } = useContext(AuthContext); // Check if user is logged in
 
-  const [borrowDate, setBorrowDate] = useState(new Date());
-  const [duration, setDuration] = useState(7);
-  const [returnDate, setReturnDate] = useState(new Date());
+  const { book } = route.params; // Get the book passed from navigation
+
+  // Initialize return date to 7 days from today
+  const initialReturnDate = new Date();
+  initialReturnDate.setDate(initialReturnDate.getDate() + 7);
+
+  const [returnDate, setReturnDate] = useState(initialReturnDate);
   const [showPicker, setShowPicker] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    const newReturnDate = new Date(borrowDate);
-    newReturnDate.setDate(newReturnDate.getDate() + duration);
-    setReturnDate(newReturnDate);
-  }, [borrowDate, duration]);
+  // Handler for date picker changes
+  const onChangeDate = (event, selectedDate) => {
+    const currentDate = selectedDate || returnDate; // Keep current date if picker is dismissed (Android)
+    setShowPicker(Platform.OS === 'ios'); // Keep picker open on iOS until dismissed
 
+    // Ensure selected date is not in the past
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set time to beginning of day for comparison
+    if (currentDate < today) {
+      Alert.alert("Invalid Date", "Return date cannot be in the past.");
+      setReturnDate(new Date(today.setDate(today.getDate() + 1))); // Reset to tomorrow if past date selected
+    } else {
+      setReturnDate(currentDate);
+    }
+  };
+
+  // Handler for confirming the borrow request
   const handleConfirmBorrow = async () => {
-    try {
-      const user = auth.currentUser;
-      if (!user) return;
+    if (!token) {
+      Alert.alert("Login Required", "Please log in to borrow books.");
+      return;
+    }
+     if (!book || !book.id) {
+        Alert.alert("Error", "Book information is missing.");
+        return;
+    }
 
-      const bookRef = doc(db, 'books', book.id);
-      await updateDoc(bookRef, {
-        available: false,
-        borrowedBy: user.uid,
-        borrowedAt: borrowDate.toISOString(),
-        returnAt: returnDate.toISOString(),
+    console.log("TESTING");
+
+    setIsSubmitting(true);
+    const formattedReturnDate = formatDate(returnDate); // Format date for API
+
+    try {
+      console.log(`Attempting to borrow book ID: ${book.id} with return date: ${formattedReturnDate}`);
+      const response = await apiClient.post('/borrow/borrow/', {
+        book: book.id,
+        return_date: formattedReturnDate,
       });
 
-      alert('Book borrowed successfully!');
-      navigation.goBack();
-    } catch (err) {
-      console.error('Error borrowing book:', err);
+      // Handle success (response.data contains the created Borrowing object)
+      console.log("Borrow successful:", response.data);
+      Alert.alert(
+        'Borrow Request Submitted',
+        `Your request to borrow "${book.title}" until ${formattedReturnDate} has been submitted.` +
+        (response.data?.status === 'pending' ? ' Please wait for librarian approval.' : '') // Check if API indicates pending status
+      );
+      // Navigate to a relevant screen, e.g., 'Your Books' or back to details/home
+      navigation.navigate('Tabs', { screen: 'YourBooksScreen' }); // Goes to the Your Books tab
+
+      // Debugging
+      // console.log("Attempting to navigate to Tabs navigator...");
+      // navigation.navigate('Tabs');
+
+    } catch (error) {
+      console.error("Borrow failed:", error.response?.data || error);
+      let errorMessage = 'Could not submit borrow request.';
+      if (error.response?.data) {
+         const errors = error.response.data;
+         // Handle specific errors from backend if available
+         if (errors.error) { // Check for custom 'error' key used in BorrowingViewSet
+             errorMessage = errors.error;
+         } else {
+             const errorMessages = Object.keys(errors).map(key => `${key}: ${errors[key].join(', ')}`);
+             if (errorMessages.length > 0) errorMessage = errorMessages.join('\n');
+             else if (errors.detail) errorMessage = errors.detail;
+         }
+      }
+      Alert.alert('Borrow Failed', errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{book.title}</Text>
-      <Text style={styles.label}>Duration (days):</Text>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+            <Text style={styles.headerTitle}>Borrow Book</Text>
+            <View style={styles.bookInfo}>
+                <Text style={styles.titleLabel}>Book Title:</Text>
+                <Text style={styles.title}>{book?.title || 'N/A'}</Text>
+            </View>
 
-      <View style={styles.durationRow}>
-        {[1, 3, 7, 14].map((d) => (
-          <TouchableOpacity
-            key={d}
-            onPress={() => setDuration(d)}
-            style={[styles.durationButton, duration === d && styles.selected]}
-          >
-            <Text>{d}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+            <Text style={styles.label}>Select Return Date:</Text>
 
-      <Text style={styles.label}>Borrow Date:</Text>
-      <TouchableOpacity onPress={() => setShowPicker(true)} style={styles.dateBox}>
-        <Text>{borrowDate.toDateString()}</Text>
-      </TouchableOpacity>
+            {/* Button to open date picker */}
+            <TouchableOpacity onPress={() => setShowPicker(true)} style={styles.dateDisplay}>
+                <Ionicons name="calendar-outline" size={20} color="#4A5568" />
+                <Text style={styles.dateText}>{returnDate.toDateString()}</Text>
+            </TouchableOpacity>
 
-      {showPicker && (
-        <DateTimePicker
-          value={borrowDate}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={(event, selectedDate) => {
-            setShowPicker(false);
-            if (selectedDate) setBorrowDate(selectedDate);
-          }}
-        />
-      )}
+            {/* Show DateTimePicker when state is true */}
+            {showPicker && (
+                <DateTimePicker
+                    value={returnDate}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={onChangeDate}
+                    minimumDate={new Date()} // Prevent selecting past dates
+                    // maximumDate={ // Optional: Set a max borrow duration limit }
+                />
+            )}
 
-      <Text style={styles.label}>Return Date:</Text>
-      <View style={styles.dateBox}>
-        <Text>{returnDate.toDateString()}</Text>
-      </View>
+            {/* Confirm Button */}
+            <TouchableOpacity
+                style={[styles.borrowButton, isSubmitting && styles.buttonDisabled]}
+                onPress={handleConfirmBorrow}
+                disabled={isSubmitting}
+            >
+                {isSubmitting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                    <Text style={styles.borrowText}>Confirm Borrow Request</Text>
+                )}
+            </TouchableOpacity>
 
-      <TouchableOpacity style={styles.borrowButton} onPress={handleConfirmBorrow}>
-        <Text style={styles.borrowText}>Confirm Borrow</Text>
-      </TouchableOpacity>
+             {/* Back Button */}
+            <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => navigation.goBack()}
+                disabled={isSubmitting}
+            >
+                <Text style={styles.backText}>Cancel</Text>
+            </TouchableOpacity>
+        </ScrollView>
     </View>
   );
 }
 
+// Updated Styles
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
-    backgroundColor: '#f8f8f8',
     flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  scrollContainer: {
+      padding: 24,
+      paddingTop: 20, // Add some top padding within scroll
+  },
+  headerTitle: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: '#1a202c',
+      marginBottom: 25,
+      textAlign: 'center',
+  },
+  bookInfo: {
+      marginBottom: 25,
+      padding: 15,
+      backgroundColor: '#fff',
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#e2e8f0',
+  },
+  titleLabel: {
+      fontSize: 14,
+      color: '#718096',
+      marginBottom: 4,
   },
   title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#222',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2d3748',
+    lineHeight: 24,
   },
   label: {
     fontSize: 16,
+    fontWeight: '500',
     marginVertical: 10,
-    color: '#444',
+    color: '#4a5568',
   },
-  durationRow: {
+   dateDisplay: {
     flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
     marginBottom: 20,
   },
-  durationButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    marginRight: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ccc',
-  },
-  selected: {
-    backgroundColor: '#add8e6',
-  },
-  dateBox: {
-    backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 8,
-    borderColor: '#ccc',
-    borderWidth: 1,
+  dateText: {
+      fontSize: 16,
+      color: '#2d3748',
+      marginLeft: 10,
   },
   borrowButton: {
     marginTop: 30,
-    backgroundColor: '#1e90ff',
-    padding: 15,
-    borderRadius: 10,
+    backgroundColor: '#3b82f6',
+    paddingVertical: 14,
+    borderRadius: 8,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    minHeight: 48,
   },
   borrowText: {
     color: '#fff',
-    fontWeight: 'bold',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  buttonDisabled: {
+    backgroundColor: '#93c5fd',
+  },
+  backButton: {
+    marginTop: 15,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  backText: {
+    color: '#4a5568',
+    fontWeight: '500',
     fontSize: 16,
   },
 });

@@ -1,5 +1,5 @@
 // Frontend/screens/BookDetailsScreen.js
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,40 +7,77 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  ScrollView, // Use ScrollView for potentially long summaries
+  ScrollView, 
   ActivityIndicator
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context'; // Import hook
-// Removed: Firebase imports (doc, updateDoc, addDoc, collection, serverTimestamp, getDoc, setDoc, deleteDoc)
-// Removed: import { auth, db } from '../config/firebase';
-import { AuthContext } from '../navigation/AuthProvider'; // Import AuthContext
-import apiClient from '../services/apiClient'; // Import apiClient
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AuthContext } from '../navigation/AuthProvider'; 
+import apiClient from '../services/apiClient'; 
 import { Ionicons } from '@expo/vector-icons';
 
 // Default image if book.cover_image is null/empty
 const DEFAULT_COVER = 'https://via.placeholder.com/300/CCCCCC/FFFFFF?text=No+Cover';
 
-export default function BookDetailsScreen({ route }) {
-  const { book: initialBookData } = route.params; // Get book passed from navigation
+export default function BookDetailsScreen() {
+  const route = useRoute();
   const navigation = useNavigation();
-  const insets = useSafeAreaInsets(); // Get safe area insets
-  const { user, token } = useContext(AuthContext); // Get user/token state
+  const insets = useSafeAreaInsets();
+  const { token } = useContext(AuthContext);
 
-  // Local state for favorite status, initialized from passed prop
-  const [isFavorite, setIsFavorite] = useState(initialBookData?.is_favorite || false);
-  // Use state for book data if you want to update it after fav/borrow actions
+  const { book: initialBookData } = route.params;
+
   const [book, setBook] = useState(initialBookData);
+  const [isFavorite, setIsFavorite] = useState(initialBookData?.is_favorite || false);
 
-  // Loading states for actions
+  const [borrowingStatus, setBorrowingStatus] = useState(null); 
+  const [borrowingId, setBorrowingId] = useState(null); 
+  const [isLoadingStatus, setIsLoadingStatus] = useState(true);
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
-  const [isBorrowing, setIsBorrowing] = useState(false); // Although borrow action navigates away
+  const [isCancelling, setIsCancelling] = useState(false);
 
-   // Update local state if the initial book data changes (e.g., navigating back)
-   useEffect(() => {
-    setBook(initialBookData);
-    setIsFavorite(initialBookData?.is_favorite || false);
-  }, [initialBookData]);
+  const fetchBorrowingStatus = useCallback(async () => {
+    if (!token || !book?.id) {
+        setBorrowingStatus('none'); // Assume not borrowed if not logged in or no book id
+        setBorrowingId(null);
+        setIsLoadingStatus(false);
+        return;
+    }
+    setIsLoadingStatus(true);
+    try {
+        console.log(`Fetching borrowing status for book ID: ${book.id}`);
+        // Fetch borrowing records for this specific book by the user
+        const response = await apiClient.get('/borrow/', { params: { book_id: book.id } });
+        const borrowings = response.data?.results || response.data || [];
+
+        // Find the active or pending borrowing record for this book
+        const activeOrPendingBorrow = borrowings.find(b => b.book.id === book.id && (b.status === 'approved' || b.status === 'pending') && b.is_active);
+
+        if (activeOrPendingBorrow) {
+            setBorrowingStatus(activeOrPendingBorrow.status); // 'approved' or 'pending'
+            setBorrowingId(activeOrPendingBorrow.id);
+             console.log(`Borrowing status: ${activeOrPendingBorrow.status}, ID: ${activeOrPendingBorrow.id}`);
+        } else {
+            setBorrowingStatus('none'); // Not currently borrowed or pending
+            setBorrowingId(null);
+             console.log('Borrowing status: none');
+        }
+    } catch (error) {
+        console.error("Failed to fetch borrowing status:", error.response || error);
+        setBorrowingStatus('error'); // Indicate an error occurred
+        setBorrowingId(null);
+    } finally {
+        setIsLoadingStatus(false);
+    }
+  }, [token, book?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+        setBook(initialBookData); // Reset book data from params on focus
+        setIsFavorite(initialBookData?.is_favorite || false);
+        fetchBorrowingStatus(); // Fetch current status
+    }, [initialBookData, fetchBorrowingStatus])
+  );
 
   // Handle Favorite Toggle
   const handleFavoriteToggle = async () => {
@@ -82,6 +119,44 @@ export default function BookDetailsScreen({ route }) {
     }
   };
 
+  const cancelBorrow = async () => {
+    if (!borrowingId) {
+        Alert.alert("Error", "Cannot find borrowing record ID to cancel.");
+        return;
+    }
+    setIsCancelling(true);
+    try {
+        console.log(`Attempting DELETE to /borrow/${borrowingId}/cancel_request/`);
+        await apiClient.delete(`/borrow/${borrowingId}/cancel_request/`);
+        Alert.alert('Success', 'Borrow request cancelled.');
+        setBorrowingStatus('none'); // Update local status
+        setBorrowingId(null);
+        // Maybe refresh book availability data? Optional.
+    } catch (error) {
+        console.error('Error cancelling borrow request:', error.response?.data || error);
+        let errorMessage = 'Could not cancel request.';
+        if (error.response?.data?.detail) errorMessage = error.response.data.detail;
+        else if (error.response?.data?.error) errorMessage = error.response.data.error;
+        Alert.alert('Cancellation Failed', errorMessage);
+    } finally {
+        setIsCancelling(false);
+    }
+  };
+
+  // Navigate to Borrow Screen (Initiate Borrow)
+  const initiateBorrow = () => {
+    if (!token) {
+     Alert.alert("Login Required", "Please log in to borrow books.");
+     return;
+   }
+   if (!book || !book.is_available || book.quantity <= 0 || borrowingStatus === 'approved' || borrowingStatus === 'pending') {
+     // Should not happen if button logic is correct, but good check
+     Alert.alert('Cannot Borrow', 'Book is unavailable or already borrowed/requested.');
+     return;
+   }
+   navigation.navigate('BorrowScreen', { book });
+ };
+
   // Handle Initiate Borrow Action
   const handleBorrow = () => {
      if (!token) {
@@ -120,8 +195,7 @@ export default function BookDetailsScreen({ route }) {
       : book.quantity === 1
       ? '1 copy available'
       : 'Out of stock';
-  const borrowDisabled = !book.is_available || book.quantity <= 0;
-
+  const borrowActionDisabled = !book.is_available || book.quantity <= 0 || borrowingStatus === 'approved' || borrowingStatus === 'pending';
 
   return (
     // Apply safe area padding
@@ -164,16 +238,41 @@ export default function BookDetailsScreen({ route }) {
             <Text style={styles.summary}>{book.summary || 'No summary provided for this book.'}</Text>
         </View>
 
-        {/* Borrow Button */}
-        <TouchableOpacity
-            style={[styles.button, borrowDisabled && styles.buttonDisabled]}
-            onPress={handleBorrow}
-            disabled={borrowDisabled}
-        >
-            <Text style={styles.buttonText}>
-            {borrowDisabled ? 'Unavailable to Borrow' : 'Borrow This Book'}
-            </Text>
-        </TouchableOpacity>
+        {/* --- Conditional Action Button Section --- */}
+        <View style={styles.actionButtonContainer}>
+             {isLoadingStatus ? (
+                 <ActivityIndicator size="small" color="#4a5568" />
+             ) : borrowingStatus === 'pending' ? (
+                 // Show Cancel Button
+                 <TouchableOpacity
+                     style={[styles.cancelButton, isCancelling && styles.buttonDisabled]}
+                     onPress={cancelBorrow}
+                     disabled={isCancelling}
+                 >
+                      {isCancelling ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                          <Text style={styles.cancelButtonText}>Cancel Borrow Request</Text>
+                      )}
+                 </TouchableOpacity>
+             ) : borrowingStatus === 'approved' ? (
+                 // Show Disabled "Currently Borrowing" Button
+                 <TouchableOpacity style={[styles.button, styles.buttonDisabled]} disabled={true}>
+                     <Text style={styles.buttonText}>Currently Borrowing</Text>
+                 </TouchableOpacity>
+             ) : (
+                 // Show "Borrow This Book" Button (enabled/disabled based on availability)
+                 <TouchableOpacity
+                     style={[styles.button, borrowActionDisabled && styles.buttonDisabled]}
+                     onPress={initiateBorrow}
+                     disabled={borrowActionDisabled}
+                 >
+                     <Text style={styles.buttonText}>
+                         {(!book.is_available || book.quantity <= 0) ? 'Unavailable to Borrow' : 'Borrow This Book'}
+                     </Text>
+                 </TouchableOpacity>
+             )}
+        </View>
         </ScrollView>
     </View>
   );
@@ -247,16 +346,38 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   button: {
-    backgroundColor: '#3b82f6', // Use consistent blue
+    backgroundColor: '#3b82f6',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: 10, // Adjusted margin
+    marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    minHeight: 48,
   },
   buttonDisabled: {
     backgroundColor: '#a0aec0', // Gray when disabled
+    opacity: 0.7,
+  },
+  actionButtonContainer: { // Container for the main action button section
+      marginTop: 20,
   },
   buttonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  cancelButton: {
+    backgroundColor: '#E53E3E', // Red
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  cancelButtonText: {
     color: '#fff',
     fontWeight: '600',
     fontSize: 16,
