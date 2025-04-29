@@ -78,19 +78,37 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+
   const logout = async () => {
     setLoading(true);
+    console.log('Initiating logout...'); // Add log
     try {
+      // Attempt backend logout - it's okay if this fails sometimes
       await apiClient.post('/auth/logout/');
-      console.log('Backend logout successful.');
+      console.log('Backend logout successful (token invalidated server-side).');
     } catch (error) {
-      console.error('Logout failed:', error.response ? error.response.data : error.message);
-      await AsyncStorage.removeItem('authToken');
-      await AsyncStorage.removeItem('userData');
-      setToken(null);
-      setUser(null);
+      // Log backend error but proceed with local logout
+      console.error('Backend logout call failed (proceeding with local logout):', error.response ? error.response.data : error.message);
     } finally {
-      setLoading(false);
+      // --- THIS MUST ALWAYS RUN ---
+      try {
+        console.log('Clearing local auth data...');
+        await AsyncStorage.removeItem('authToken');
+        await AsyncStorage.removeItem('userData');
+        // Update the state AFTER clearing storage
+        setToken(null);
+        setUser(null);
+        console.log('Local logout complete.');
+      } catch (storageError) {
+        console.error('Failed to clear local auth data:', storageError);
+        // Still try to set state to null even if storage fails
+        setToken(null);
+        setUser(null);
+      } finally {
+         // Ensure loading is set to false after everything
+         setLoading(false);
+      }
+      // ---------------------------
     }
   };
 

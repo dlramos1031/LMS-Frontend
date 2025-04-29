@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { AuthProvider } from './navigation/AuthProvider';
 import RootNavigator from './navigation/RootNavigator';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import registerForPushNotificationsAsync from './utils/registerForPushNotifications';
 
@@ -30,10 +31,12 @@ export default function App() {
   }, []);
 
   return (
-    <NavigationContainer>
-      <AuthProvider>
-        <RootNavigator />
-      </AuthProvider>
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

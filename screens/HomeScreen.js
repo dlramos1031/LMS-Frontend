@@ -7,7 +7,9 @@ import {
   TextInput,
   SafeAreaView,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native'; 
 import { AuthContext } from '../navigation/AuthProvider'; 
 import apiClient from '../services/apiClient'; 
@@ -15,16 +17,22 @@ import BookCarousel from '../components/BookCarousel';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
+
   const [search, setSearch] = useState('');
   const [userName, setUserName] = useState('');
-  const [loadingUser, setLoadingUser] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [hasFavorites, setHasFavorites] = useState(false); 
 
   const navigation = useNavigation();
-  const { user } = useContext(AuthContext); 
+  const { user, token } = useContext(AuthContext);
 
   // Function to check if user has any favorite books via API
    const checkFavorites = useCallback(async () => {
+    if (!token) {
+      setHasFavorites(false); // Ensure favorites is false if not logged in
+      return;
+    }
     try {
       const response = await apiClient.get('/books/', { params: { is_favorite: true, limit: 1 } });
       setHasFavorites(response.data.results?.length > 0 || response.data?.length > 0);
@@ -32,16 +40,18 @@ export default function HomeScreen() {
       console.error('Failed to check for favorites:', error);
       setHasFavorites(false); // Assume no favorites on error
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     // Set user name from Auth context
     if (user) {
       setUserName(user.full_name || user.username || ''); // Use full_name or fallback to username
-      setLoadingUser(false);
+      setInitialLoading(false);
     } else {
-      // Handle case where user data might not be loaded yet or user is logged out
-      setLoadingUser(false); // Stop loading even if user is null
+      // Handle user being logged out or not yet loaded
+      setUserName('');
+      setHasFavorites(false); // Ensure favorites cleared on logout
+      setInitialLoading(false);
     }
   }, [user]); // Re-run when user context changes
 
@@ -63,25 +73,21 @@ export default function HomeScreen() {
     navigation.navigate('BookDetailsScreen', { book });
   };
 
-  // Show main loader only if user data is loading initially
-  if (loadingUser && !userName) {
+  // Show main loader only if initial load AND user data isn't set yet
+  if (initialLoading) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]}>
+      <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color="#1976d2"/>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled" // Dismiss keyboard on tap outside input
       >
-        <Text style={styles.greeting}>
-          Welcome back, <Text style={styles.name}>{userName || 'User'}</Text> 👋
-        </Text>
-
         <View style={styles.searchContainer}>
           <Ionicons name="search-outline" size={20} color="#999" style={styles.searchIcon} />
           <TextInput
@@ -119,7 +125,6 @@ export default function HomeScreen() {
                 <BookCarousel
                   filter="favorites" // Will use API filter /books/?is_favorite=true
                   onBookPress={handleBookPress}
-                  // No need to pass favoriteIds anymore
                 />
               </View>
             )}
@@ -140,11 +145,10 @@ export default function HomeScreen() {
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
-// GenreSection component remains the same
 function GenreSection({ icon, label, query, onBookPress }) {
   return (
     <View style={styles.section}>
@@ -156,22 +160,24 @@ function GenreSection({ icon, label, query, onBookPress }) {
   );
 }
 
-// Styles remain largely the same
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f4f6f9' },
-   centered: { // Added for centering loader
+  container: { 
+    flex: 1, 
+    backgroundColor: '#f4f6f9' 
+  }, 
+  centered: {
     justifyContent: 'center',
     alignItems: 'center',
   },
   scroll: {
     padding: 16,
-    paddingTop: 20, // Reduced top padding
   },
   greeting: {
     fontSize: 24,
     fontWeight: '600',
-    marginBottom: 16, // Increased margin
+    marginBottom: 16, 
     color: '#333',
+    marginTop: Platform.OS === 'android' ? 10 : 0,
   },
   name: {
     color: '#1976d2',
@@ -186,7 +192,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 28,
     borderWidth: 1,
-    borderColor: '#e0e0e0', // Lighter border
+    borderColor: '#e0e0e0', 
   },
   searchIcon: {
     marginRight: 8,
@@ -204,7 +210,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
     color: '#444',
-    flexDirection: 'row', // Align icon and text
-    alignItems: 'center', // Align icon and text
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: 16,
   },
 });
