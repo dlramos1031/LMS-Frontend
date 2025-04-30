@@ -1,16 +1,5 @@
-// Frontend/screens/BorrowScreen.js
-
-import React, { useState, useEffect, useContext } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Platform,
-  Alert,
-  ActivityIndicator,
-  ScrollView
-} from 'react-native';
+import React, { useState, useContext } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation, useRoute } from '@react-navigation/native'; 
 import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
@@ -22,44 +11,39 @@ import { Ionicons } from '@expo/vector-icons';
 const formatDate = (date) => {
   const d = new Date(date);
   const year = d.getFullYear();
-  const month = (`0${d.getMonth() + 1}`).slice(-2); // Months are 0-indexed
+  const month = (`0${d.getMonth() + 1}`).slice(-2); 
   const day = (`0${d.getDate()}`).slice(-2);
   return `${year}-${month}-${day}`;
 };
 
 export default function BorrowScreen() {
-  const route = useRoute(); // Use hook to get route params
+  const route = useRoute(); 
   const navigation = useNavigation();
-  const insets = useSafeAreaInsets(); // Get safe area insets
-  const { token } = useContext(AuthContext); // Check if user is logged in
+  const insets = useSafeAreaInsets(); 
+  const { token } = useContext(AuthContext); 
+  const { book } = route.params; 
 
-  const { book } = route.params; // Get the book passed from navigation
-
-  // Initialize return date to 7 days from today
   const initialReturnDate = new Date();
   initialReturnDate.setDate(initialReturnDate.getDate() + 7);
-
+  
   const [returnDate, setReturnDate] = useState(initialReturnDate);
   const [showPicker, setShowPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Handler for date picker changes
   const onChangeDate = (event, selectedDate) => {
-    const currentDate = selectedDate || returnDate; // Keep current date if picker is dismissed (Android)
-    setShowPicker(Platform.OS === 'ios'); // Keep picker open on iOS until dismissed
+    const currentDate = selectedDate || returnDate; 
+    setShowPicker(Platform.OS === 'ios'); 
 
-    // Ensure selected date is not in the past
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Set time to beginning of day for comparison
+    today.setHours(0, 0, 0, 0); 
     if (currentDate < today) {
       Alert.alert("Invalid Date", "Return date cannot be in the past.");
-      setReturnDate(new Date(today.setDate(today.getDate() + 1))); // Reset to tomorrow if past date selected
+      setReturnDate(new Date(today.setDate(today.getDate() + 1))); 
     } else {
       setReturnDate(currentDate);
     }
   };
 
-  // Handler for confirming the borrow request
   const handleConfirmBorrow = async () => {
     if (!token) {
       Alert.alert("Login Required", "Please log in to borrow books.");
@@ -70,11 +54,9 @@ export default function BorrowScreen() {
         return;
     }
 
-    console.log("TESTING");
-
     setIsSubmitting(true);
-    const formattedReturnDate = formatDate(returnDate); // Format date for API
 
+    const formattedReturnDate = formatDate(returnDate);
     try {
       console.log(`Attempting to borrow book ID: ${book.id} with return date: ${formattedReturnDate}`);
       const response = await apiClient.post('/borrow/borrow/', {
@@ -82,27 +64,19 @@ export default function BorrowScreen() {
         return_date: formattedReturnDate,
       });
 
-      // Handle success (response.data contains the created Borrowing object)
-      console.log("Borrow successful:", response.data);
       Alert.alert(
         'Borrow Request Submitted',
         `Your request to borrow "${book.title}" until ${formattedReturnDate} has been submitted.` +
-        (response.data?.status === 'pending' ? ' Please wait for librarian approval.' : '') // Check if API indicates pending status
+        (response.data?.status === 'pending' ? ' Please wait for librarian approval.' : '') 
       );
-      // Navigate to a relevant screen, e.g., 'Your Books' or back to details/home
-      navigation.navigate('Tabs', { screen: 'YourBooksScreen' }); // Goes to the Your Books tab
-
-      // Debugging
-      // console.log("Attempting to navigate to Tabs navigator...");
-      // navigation.navigate('Tabs');
+      navigation.navigate('Tabs', { screen: 'YourBooksScreen' }); 
 
     } catch (error) {
       console.error("Borrow failed:", error.response?.data || error);
       let errorMessage = 'Could not submit borrow request.';
       if (error.response?.data) {
          const errors = error.response.data;
-         // Handle specific errors from backend if available
-         if (errors.error) { // Check for custom 'error' key used in BorrowingViewSet
+         if (errors.error) { 
              errorMessage = errors.error;
          } else {
              const errorMessages = Object.keys(errors).map(key => `${key}: ${errors[key].join(', ')}`);
@@ -171,7 +145,6 @@ export default function BorrowScreen() {
   );
 }
 
-// Updated Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -179,7 +152,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
       padding: 24,
-      paddingTop: 20, // Add some top padding within scroll
+      paddingTop: 20, 
   },
   headerTitle: {
       fontSize: 24,
