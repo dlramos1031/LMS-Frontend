@@ -105,8 +105,8 @@ export default function BookDetailsScreen() {
         const response = await apiClient.post(url);
         setIsFavorite(true); // Update local state immediately
         // Update book state with potentially updated data from response
-        setBook(response.data);
-        console.log("Favorite successful:", response.data);
+        setBook(prev => ({ ...prev, is_favorite: true }));
+        console.log("Favorite successful:");
       }
        // Optionally provide user feedback e.g. Alert.alert('Success', isFavorite ? 'Removed from favorites' : 'Added to favorites');
     } catch (error) {
