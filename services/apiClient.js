@@ -1,12 +1,38 @@
 import axios from 'axios';
+import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Replace with your Django backend's local IP address
-const API_BASE_URL = 'http://10.0.2.2:8000/api/';
+const API_PORT = 8000;
+
+const PRODUCTION_URL = 'http://192.168.197.211:8000/api/';  
+
+// const API_BASE_URL = 'http://10.0.2.2:8000/api/';
+
+const getBaseUrl = () => {
+  // Check if running in Expo Go or a development build with a debugger connection
+  const debuggerHost = Constants.expoConfig?.debuggerHost;
+
+  if (debuggerHost) {
+    // Extract the hostname (IP address) from the debuggerHost string (format: 'hostname:port')
+    const hostname = debuggerHost.split(':')[0];
+
+    // Construct the base URL using the detected hostname and your API's port
+    // Ensure you use http or https based on your local server setup
+    console.log("return `http://${hostname}:${API_PORT}`;");
+    return `http://${hostname}:${API_PORT}`;
+  } else {
+    // Fallback for production builds or environments where debuggerHost is not available
+    console.warn("Cannot determine debugger host from Constants.expoConfig, falling back to production URL.");
+    return PRODUCTION_URL;
+  }
+};
+
+const baseURL = getBaseUrl();
+console.log(`[apiClient] API Base URL: ${baseURL}`);
 
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 10000, // 10 second timeout
+  baseURL: baseURL,
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
