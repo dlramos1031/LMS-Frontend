@@ -1,5 +1,4 @@
-// Frontend/screens/BookDetailsScreen.js
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useContext, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,7 +15,6 @@ import { AuthContext } from '../navigation/AuthProvider';
 import apiClient from '../services/apiClient'; 
 import { Ionicons } from '@expo/vector-icons';
 
-// Default image if book.cover_image is null/empty
 const DEFAULT_COVER = 'https://via.placeholder.com/300/CCCCCC/FFFFFF?text=No+Cover';
 
 export default function BookDetailsScreen() {
@@ -24,12 +22,9 @@ export default function BookDetailsScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { token } = useContext(AuthContext);
-
   const { book: initialBookData } = route.params;
-
   const [book, setBook] = useState(initialBookData);
   const [isFavorite, setIsFavorite] = useState(initialBookData?.is_favorite || false);
-
   const [borrowingStatus, setBorrowingStatus] = useState(null); 
   const [borrowingId, setBorrowingId] = useState(null); 
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
@@ -38,33 +33,28 @@ export default function BookDetailsScreen() {
 
   const fetchBorrowingStatus = useCallback(async () => {
     if (!token || !book?.id) {
-        setBorrowingStatus('none'); // Assume not borrowed if not logged in or no book id
+        setBorrowingStatus('none');
         setBorrowingId(null);
         setIsLoadingStatus(false);
         return;
     }
     setIsLoadingStatus(true);
     try {
-        console.log(`Fetching borrowing status for book ID: ${book.id}`);
-        // Fetch borrowing records for this specific book by the user
         const response = await apiClient.get('/borrow/', { params: { book_id: book.id } });
         const borrowings = response.data?.results || response.data || [];
 
-        // Find the active or pending borrowing record for this book
         const activeOrPendingBorrow = borrowings.find(b => b.book.id === book.id && (b.status === 'approved' || b.status === 'pending') && b.is_active);
 
         if (activeOrPendingBorrow) {
-            setBorrowingStatus(activeOrPendingBorrow.status); // 'approved' or 'pending'
+            setBorrowingStatus(activeOrPendingBorrow.status); 
             setBorrowingId(activeOrPendingBorrow.id);
-             console.log(`Borrowing status: ${activeOrPendingBorrow.status}, ID: ${activeOrPendingBorrow.id}`);
         } else {
-            setBorrowingStatus('none'); // Not currently borrowed or pending
+            setBorrowingStatus('none'); 
             setBorrowingId(null);
-             console.log('Borrowing status: none');
         }
     } catch (error) {
         console.error("Failed to fetch borrowing status:", error.response || error);
-        setBorrowingStatus('error'); // Indicate an error occurred
+        setBorrowingStatus('error'); 
         setBorrowingId(null);
     } finally {
         setIsLoadingStatus(false);
@@ -73,19 +63,18 @@ export default function BookDetailsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-        setBook(initialBookData); // Reset book data from params on focus
+        setBook(initialBookData); 
         setIsFavorite(initialBookData?.is_favorite || false);
-        fetchBorrowingStatus(); // Fetch current status
+        fetchBorrowingStatus(); 
     }, [initialBookData, fetchBorrowingStatus])
   );
 
-  // Handle Favorite Toggle
   const handleFavoriteToggle = async () => {
     if (!token) {
       Alert.alert("Login Required", "Please log in to add favorites.");
       return;
     }
-    if (!book || !book.id) return; // Ensure book data is available
+    if (!book || !book.id) return;
 
     setIsTogglingFavorite(true);
     const url = `/books/${book.id}/favorite/`;
@@ -93,27 +82,19 @@ export default function BookDetailsScreen() {
     try {
       if (isFavorite) {
         // --- Unfavorite ---
-        console.log("Attempting to DELETE favorite:", url);
         await apiClient.delete(url);
-        setIsFavorite(false); // Update local state immediately
-        // Update book state if needed (optional, API doesn't return book on DELETE)
+        setIsFavorite(false);
         setBook(prev => ({ ...prev, is_favorite: false }));
-        console.log("Unfavorite successful");
       } else {
         // --- Favorite ---
-        console.log("Attempting to POST favorite:", url);
-        const response = await apiClient.post(url);
-        setIsFavorite(true); // Update local state immediately
-        // Update book state with potentially updated data from response
+        await apiClient.post(url);
+        setIsFavorite(true);
         setBook(prev => ({ ...prev, is_favorite: true }));
-        console.log("Favorite successful:");
       }
-       // Optionally provide user feedback e.g. Alert.alert('Success', isFavorite ? 'Removed from favorites' : 'Added to favorites');
+       Alert.alert('Success', isFavorite ? 'Removed from favorites' : 'Added to favorites');
     } catch (error) {
       console.error('Favorite toggle failed:', error.response?.data || error);
       Alert.alert('Error', 'Could not update favorites. Please try again.');
-      // Revert local state on error? Optional.
-      // setIsFavorite(prev => !prev);
     } finally {
       setIsTogglingFavorite(false);
     }
@@ -126,12 +107,10 @@ export default function BookDetailsScreen() {
     }
     setIsCancelling(true);
     try {
-        console.log(`Attempting DELETE to /borrow/${borrowingId}/cancel_request/`);
         await apiClient.delete(`/borrow/${borrowingId}/cancel_request/`);
         Alert.alert('Success', 'Borrow request cancelled.');
-        setBorrowingStatus('none'); // Update local status
+        setBorrowingStatus('none');
         setBorrowingId(null);
-        // Maybe refresh book availability data? Optional.
     } catch (error) {
         console.error('Error cancelling borrow request:', error.response?.data || error);
         let errorMessage = 'Could not cancel request.';
@@ -143,38 +122,17 @@ export default function BookDetailsScreen() {
     }
   };
 
-  // Navigate to Borrow Screen (Initiate Borrow)
-  const initiateBorrow = () => {
+  const handleBorrow = () => {
     if (!token) {
      Alert.alert("Login Required", "Please log in to borrow books.");
      return;
    }
    if (!book || !book.is_available || book.quantity <= 0 || borrowingStatus === 'approved' || borrowingStatus === 'pending') {
-     // Should not happen if button logic is correct, but good check
      Alert.alert('Cannot Borrow', 'Book is unavailable or already borrowed/requested.');
      return;
    }
    navigation.navigate('BorrowScreen', { book });
  };
-
-  // Handle Initiate Borrow Action
-  const handleBorrow = () => {
-     if (!token) {
-      Alert.alert("Login Required", "Please log in to borrow books.");
-      return;
-    }
-    if (!book) return;
-
-    // Check availability based on data from API
-    if (!book.is_available || book.quantity <= 0) {
-      Alert.alert('Unavailable', 'This book is currently out of stock or unavailable for borrowing.');
-      return;
-    }
-
-    // Navigate to BorrowScreen to select dates etc.
-    // The actual API call will happen in BorrowScreen after date selection.
-    navigation.navigate('BorrowScreen', { book }); // <-- Navigate to BorrowScreen
-  };
 
   // Defensive check if book data is somehow missing
   if (!book) {
@@ -185,20 +143,13 @@ export default function BookDetailsScreen() {
     );
   }
 
-  // Prepare display data
   const authorName = book.authors?.length > 0 ? book.authors.map(a => a.name).join(', ') : 'Unknown Author';
   const genreNames = book.genres?.length > 0 ? book.genres.map(g => g.name).join(', ') : 'N/A';
   const coverImageUrl = book.cover_image || DEFAULT_COVER;
-  const quantityLabel =
-    book.quantity > 1
-      ? `${book.quantity} copies available`
-      : book.quantity === 1
-      ? '1 copy available'
-      : 'Out of stock';
+  const quantityLabel = book.quantity > 1 ? `${book.quantity} copies available` : book.quantity === 1 ? '1 copy available' : 'Out of stock';
   const borrowActionDisabled = !book.is_available || book.quantity <= 0 || borrowingStatus === 'approved' || borrowingStatus === 'pending';
 
   return (
-    // Apply safe area padding
     <View style={[styles.container, { paddingTop: insets.top }]}>
         <ScrollView contentContainerStyle={styles.scrollContainer}>
         <Image source={{ uri: coverImageUrl }} style={styles.cover} />
@@ -215,8 +166,8 @@ export default function BookDetailsScreen() {
                 ) : (
                     <Ionicons
                     name={isFavorite ? 'heart' : 'heart-outline'}
-                    size={32} // Slightly larger icon
-                    color={isFavorite ? '#e53e3e' : '#A0AEC0'} // Red for favorite, gray otherwise
+                    size={32} 
+                    color={isFavorite ? '#e53e3e' : '#A0AEC0'} 
                     />
                 )}
             </TouchableOpacity>
@@ -243,7 +194,7 @@ export default function BookDetailsScreen() {
              {isLoadingStatus ? (
                  <ActivityIndicator size="small" color="#4a5568" />
              ) : borrowingStatus === 'pending' ? (
-                 // Show Cancel Button
+                 // Show Cancel Button (appears during pending request)
                  <TouchableOpacity
                      style={[styles.cancelButton, isCancelling && styles.buttonDisabled]}
                      onPress={cancelBorrow}
@@ -264,7 +215,7 @@ export default function BookDetailsScreen() {
                  // Show "Borrow This Book" Button (enabled/disabled based on availability)
                  <TouchableOpacity
                      style={[styles.button, borrowActionDisabled && styles.buttonDisabled]}
-                     onPress={initiateBorrow}
+                     onPress={handleBorrow}
                      disabled={borrowActionDisabled}
                  >
                      <Text style={styles.buttonText}>
@@ -278,71 +229,70 @@ export default function BookDetailsScreen() {
   );
 }
 
-// Updated Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc', // Background for the whole screen
+    backgroundColor: '#f8fafc',
   },
   centered: {
     justifyContent: 'center',
     alignItems: 'center',
   },
   scrollContainer: {
-      padding: 20, // Padding for scroll content
-      paddingBottom: 40, // Extra padding at bottom
+      padding: 20, 
+      paddingBottom: 40, 
   },
   cover: {
     width: '100%',
-    height: 300, // Larger cover image
+    height: 300, 
     resizeMode: 'cover',
     borderRadius: 12,
-    marginBottom: 25, // More space after cover
+    marginBottom: 25, 
     backgroundColor: '#e2e8f0',
   },
   headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between', // Align items
-    alignItems: 'flex-start', // Align text top, icon top
+    justifyContent: 'space-between', 
+    alignItems: 'flex-start', 
     marginBottom: 20,
   },
   iconButton: {
-      paddingLeft: 10, // Add padding to prevent text overlap
+      paddingLeft: 10, 
   },
   title: {
-    fontSize: 24, // Larger title
+    fontSize: 24, 
     fontWeight: 'bold',
-    color: '#1a202c', // Darker title
+    color: '#1a202c', 
     marginBottom: 2,
   },
   author: {
     fontSize: 16,
-    color: '#4a5568', // Adjusted author color
+    color: '#4a5568', 
     lineHeight: 22,
   },
   detailSection: {
-      marginBottom: 25, // Space before borrow button
+      marginBottom: 25, 
       borderTopWidth: 1,
       borderTopColor: '#e2e8f0',
       paddingTop: 15,
   },
   label: {
-    fontWeight: '600', // Slightly bolder label
+    fontWeight: '600', 
     marginTop: 14,
     marginBottom: 4,
-    color: '#4a5568', // Label color
+    color: '#4a5568', 
     fontSize: 15,
   },
   value: {
     marginBottom: 8,
-    color: '#2d3748', // Value color
+    color: '#2d3748', 
     fontSize: 16,
     lineHeight: 22,
   },
   summary: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#4a5568', // Summary color
+    color: '#4a5568', 
     marginTop: 4,
   },
   button: {
@@ -356,10 +306,10 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   buttonDisabled: {
-    backgroundColor: '#a0aec0', // Gray when disabled
+    backgroundColor: '#a0aec0', 
     opacity: 0.7,
   },
-  actionButtonContainer: { // Container for the main action button section
+  actionButtonContainer: { 
       marginTop: 20,
   },
   buttonText: {
@@ -368,7 +318,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   cancelButton: {
-    backgroundColor: '#E53E3E', // Red
+    backgroundColor: '#E53E3E', 
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
