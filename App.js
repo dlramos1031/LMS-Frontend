@@ -7,6 +7,7 @@ import registerForPushNotificationsAsync from './utils/registerForPushNotificati
 import apiClient from './services/apiClient';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { StatusBar } from 'expo-status-bar';
 
 // Key for AsyncStorage to track if token sent for the current login session
 const PUSH_TOKEN_SENT_KEY = '@push_token_sent_for_session';
@@ -98,6 +99,7 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <NavigationContainer>
+          <StatusBar style="dark" />
           <InnerApp />
         </NavigationContainer>
       </AuthProvider>

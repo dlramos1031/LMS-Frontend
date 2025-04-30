@@ -83,8 +83,7 @@ export default function ProfileScreen({ navigation }) {
     try {
       console.log("Updating profile to /api/profile/ with data:", dataToSave);
       const response = await apiClient.patch('/auth/profile/', dataToSave);
-      setProfile(response.data); // Update profile state with response
-       // Optionally update user in AuthContext here if needed
+      setProfile(response.data);
       Alert.alert('Success', 'Profile updated successfully');
       console.log("Profile update successful:", response.data);
     } catch (err) {
@@ -115,7 +114,6 @@ export default function ProfileScreen({ navigation }) {
       console.error('Logout error in ProfileScreen:', error);
     }
   };
-
 
   // Render loading indicator
   if (loading) {
@@ -212,7 +210,6 @@ export default function ProfileScreen({ navigation }) {
   );
 }
 
-// Styles (mostly same as before, added error text style)
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -224,50 +221,139 @@ const styles = StyleSheet.create({
     },
     scrollContainer: {
         paddingHorizontal: 24,
-        paddingBottom: 40, // Add padding at the bottom
+        paddingBottom: 40, 
     },
     avatarContainer: {
         alignItems: 'center',
-        marginVertical: 30, // Give vertical margin
+        marginVertical: 30, 
     },
-    avatarMock: { /* ... same ... */
-        width: 100, height: 100, borderRadius: 50, backgroundColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#cbd5e1', position: 'relative' },
-    editIcon: { /* ... same ... */
-        position: 'absolute', bottom: 0, right: 0, backgroundColor: '#3b82f6', borderRadius: 12, padding: 5, borderWidth: 2, borderColor: '#f8fafc' },
-    avatarEmoji: { /* ... same ... */
-        fontSize: 42 },
-    username: { /* ... same ... */
-        fontSize: 22, fontWeight: '600', color: '#1e293b', marginTop: 12 },
-    section: { /* ... same ... */
-        marginBottom: 25, backgroundColor: '#ffffff', borderRadius: 12, padding: 20, shadowColor: "#000", shadowOffset: { width: 0, height: 1, }, shadowOpacity: 0.05, shadowRadius: 2.22, elevation: 3, },
-    sectionTitle: { /* ... same ... */
-        fontSize: 18, fontWeight: '600', color: '#334155', marginBottom: 20, paddingBottom: 5, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', },
-    inputGroup: { /* ... same ... */
-        marginBottom: 18, },
-    label: { /* ... same ... */
-        fontSize: 14, fontWeight: '500', color: '#475569', marginBottom: 8, },
-    input: { /* ... same ... */
-        borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, padding: 12, fontSize: 16, backgroundColor: '#f8fafc', color: '#1e293b', },
-    disabledInput: { /* ... same ... */
-        backgroundColor: '#e2e8f0', color: '#64748b', },
-    saveBtn: { /* ... same ... */
-        backgroundColor: '#3b82f6', paddingVertical: 14, borderRadius: 8, alignItems: 'center', marginTop: 10, flexDirection: 'row', justifyContent: 'center', minHeight: 48, },
-    saveText: { /* ... same ... */
-        color: '#fff', fontSize: 16, fontWeight: '600', },
-    secondaryBtn: { /* ... same ... */
-        flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f5f9', padding: 14, borderRadius: 8, marginTop: 12, gap: 12, borderWidth: 1, borderColor: '#e2e8f0', },
-    secondaryText: { /* ... same ... */
-        color: '#334155', fontSize: 15, fontWeight: '500', },
-    logoutBtn: { /* ... same ... */
-        flexDirection: 'row', alignItems: 'center', backgroundColor: '#ef4444', paddingVertical: 14, borderRadius: 8, marginTop: 15, justifyContent: 'center', gap: 10, },
-    logoutText: { /* ... same ... */
-        color: '#fff', fontWeight: '600', fontSize: 16, },
-    buttonDisabled: { /* ... same ... */
-        backgroundColor: '#93c5fd', },
-    errorText: { // Added style for errors
-        color: 'red',
-        textAlign: 'center',
-        marginBottom: 15,
-        paddingHorizontal: 10,
+    avatarMock: { 
+      width: 100, 
+      height: 100, 
+      borderRadius: 50,
+      backgroundColor: '#e2e8f0', 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      borderWidth: 3, 
+      borderColor: '#cbd5e1', 
+      position: 'relative' 
+    },
+    editIcon: { 
+      position: 'absolute', 
+      bottom: 0, 
+      right: 0, 
+      backgroundColor: '#3b82f6', 
+      borderRadius: 12, 
+      padding: 5, 
+      borderWidth: 2, 
+      borderColor: '#f8fafc' 
+    },
+    avatarEmoji: { 
+      fontSize: 42 
+    },
+    username: { 
+      fontSize: 22, 
+      fontWeight: '600', 
+      color: '#1e293b', 
+      marginTop: 12 
+    },
+    section: { 
+      marginBottom: 25, 
+      backgroundColor: '#ffffff', 
+      borderRadius: 12, 
+      padding: 20, 
+      shadowColor: "#000", 
+      shadowOffset: { 
+        width: 0, 
+        height: 1, 
+      }, 
+      shadowOpacity: 0.05, 
+      shadowRadius: 2.22, 
+      elevation: 3, 
+    },
+    sectionTitle: { 
+      fontSize: 18, 
+      fontWeight: '600', 
+      color: '#334155', 
+      marginBottom: 20, 
+      paddingBottom: 5, 
+      borderBottomWidth: 1, 
+      borderBottomColor: '#e2e8f0', 
+    },
+    inputGroup: { 
+      marginBottom: 18, 
+    },
+    label: { 
+      fontSize: 14, 
+      fontWeight: '500', 
+      color: '#475569', 
+      marginBottom: 8, 
+    },
+    input: { 
+      borderWidth: 1, 
+      borderColor: '#cbd5e1', 
+      borderRadius: 8, 
+      padding: 12, 
+      fontSize: 16, 
+      backgroundColor: '#f8fafc', 
+      color: '#1e293b', 
+    },
+    disabledInput: { 
+      backgroundColor: '#e2e8f0', 
+      color: '#64748b', 
+    },
+    saveBtn: { 
+      backgroundColor: '#3b82f6', 
+      paddingVertical: 14, 
+      borderRadius: 8, 
+      alignItems: 'center', 
+      marginTop: 10, 
+      flexDirection: 'row', 
+      justifyContent: 'center', 
+      minHeight: 48, 
+    },
+    saveText: { 
+      color: '#fff', 
+      fontSize: 16, 
+      fontWeight: '600', 
+    },
+    secondaryBtn: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      backgroundColor: '#f1f5f9', 
+      padding: 14, 
+      borderRadius: 8, 
+      marginTop: 12, 
+      gap: 12, 
+      borderWidth: 1, 
+      borderColor: '#e2e8f0', 
+    },
+    secondaryText: { 
+      color: '#334155', 
+      fontSize: 15, 
+      fontWeight: '500', 
+    },
+    logoutBtn: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      backgroundColor: '#ef4444', 
+      paddingVertical: 14, 
+      borderRadius: 8, 
+      marginTop: 15, 
+      justifyContent: 'center', 
+      gap: 10, 
+    },
+    logoutText: { 
+      color: '#fff', 
+      fontWeight: '600', 
+      fontSize: 16, },
+    buttonDisabled: { 
+      backgroundColor: '#93c5fd', 
+    },
+    errorText: { 
+      color: 'red',
+      textAlign: 'center',
+      marginBottom: 15,
+      paddingHorizontal: 10,
     }
 });
