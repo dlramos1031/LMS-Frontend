@@ -1,5 +1,3 @@
-// Frontend/screens/auth/RegisterScreen.js
-
 import React, { useState, useEffect, useRef, useContext } 
 from 'react';
 import {
@@ -22,8 +20,6 @@ export default function RegisterScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState(''); 
   const [fullName, setFullName] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false); 
 
@@ -46,11 +42,9 @@ export default function RegisterScreen({ navigation }) {
       }),
     ]).start();
   }, []);
-  // --- End of animation code ---
 
   const handleRegister = async () => {
-    // Basic Client-side validation
-    if (!email || !password || !confirmPassword || !fullName || !username) {
+    if (!username || !fullName || !email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all required fields.');
       return;
     }
@@ -59,25 +53,20 @@ export default function RegisterScreen({ navigation }) {
       return;
     }
 
-    // Prepare data for Django API
     const registrationData = {
       username: username, 
+      full_name: fullName,
       email: email,
       password: password,
       confirm_password: confirmPassword,
-      full_name: fullName,
     };
 
     setIsSubmitting(true);
     try {
       await register(registrationData);
-      // Registration successful, AuthProvider handles login state
-      // Navigation is handled by RootNavigator automatically
     } catch (error) {
-        // Handle registration errors from the backend
         let errorMessage = 'Registration failed. Please try again.';
         if (error.response?.data) {
-            // Extract specific field errors from Django REST Framework response
             const errors = error.response.data;
             const errorMessages = Object.keys(errors).map(key => `${key}: ${errors[key].join(', ')}`);
             if (errorMessages.length > 0) {
@@ -86,7 +75,7 @@ export default function RegisterScreen({ navigation }) {
                  errorMessage = errors.detail;
             }
         } else if (error.message) {
-            errorMessage = error.message; // Handle network or other errors
+            errorMessage = error.message;
         }
         Alert.alert('Registration Failed', errorMessage);
     } finally {
@@ -95,7 +84,6 @@ export default function RegisterScreen({ navigation }) {
   };
 
   return (
-    // Use ScrollView to prevent content being hidden by keyboard
     <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
         <View style={styles.innerContainer}>
         <Animated.Image
@@ -144,7 +132,6 @@ export default function RegisterScreen({ navigation }) {
             onChangeText={setPassword}
             value={password}
         />
-        {/* Added Confirm Password Input */}
         <TextInput
             placeholder="Confirm Password"
             placeholderTextColor="#999"
@@ -154,7 +141,6 @@ export default function RegisterScreen({ navigation }) {
             value={confirmPassword}
         />
 
-        {/* Updated Register Button */}
         <TouchableOpacity
             style={[styles.button, (isSubmitting || authLoading) && styles.buttonDisabled]}
             onPress={handleRegister}
@@ -178,7 +164,6 @@ export default function RegisterScreen({ navigation }) {
   );
 }
 
-// Updated Styles
 const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1, 
