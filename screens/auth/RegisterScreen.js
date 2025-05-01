@@ -1,6 +1,6 @@
 // Frontend/screens/auth/RegisterScreen.js
 
-import React, { useState, useEffect, useRef, useContext } // Added useContext
+import React, { useState, useEffect, useRef, useContext } 
 from 'react';
 import {
   View,
@@ -10,29 +10,25 @@ import {
   StyleSheet,
   Alert,
   Animated,
-  ActivityIndicator, // Added ActivityIndicator
-  ScrollView // Added ScrollView
+  ActivityIndicator, 
+  ScrollView 
 } from 'react-native';
-// Removed: import { createUserWithEmailAndPassword } from 'firebase/auth';
-// Removed: import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-// Removed: import { auth, db } from '../../config/firebase';
-import { AuthContext } from '../../navigation/AuthProvider'; // Import AuthContext
+import { AuthContext } from '../../navigation/AuthProvider';
 import logo from '../../assets/logo.png';
 
 export default function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState(''); // Added confirm password state
+  const [confirmPassword, setConfirmPassword] = useState(''); 
+  const [fullName, setFullName] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  // const [idNumber, setIdNumber] = useState(''); // Keep if needed locally, but won't be sent to current API
 
-  const [isSubmitting, setIsSubmitting] = useState(false); // Local loading state
+  const [isSubmitting, setIsSubmitting] = useState(false); 
 
-  // Get register function and global loading state from AuthContext
   const { register, loading: authLoading } = useContext(AuthContext);
 
-  // --- Animation code remains the same ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(-30)).current;
 
@@ -54,7 +50,7 @@ export default function RegisterScreen({ navigation }) {
 
   const handleRegister = async () => {
     // Basic Client-side validation
-    if (!email || !password || !confirmPassword || !firstName || !lastName) {
+    if (!email || !password || !confirmPassword || !fullName || !username) {
       Alert.alert('Error', 'Please fill in all required fields.');
       return;
     }
@@ -64,13 +60,12 @@ export default function RegisterScreen({ navigation }) {
     }
 
     // Prepare data for Django API
-    // Using email as username for consistency with login
     const registrationData = {
-      username: email, // Sending email as username
+      username: username, 
       email: email,
       password: password,
       confirm_password: confirmPassword,
-      full_name: `${firstName} ${lastName}`,
+      full_name: fullName,
     };
 
     setIsSubmitting(true);
@@ -119,30 +114,21 @@ export default function RegisterScreen({ navigation }) {
 
         {/* Input fields */}
         <TextInput
-            placeholder="First Name"
+            placeholder="Username"
             placeholderTextColor="#999"
             style={styles.input}
-            onChangeText={setFirstName}
-            value={firstName}
+            onChangeText={setUsername}
+            value={username}
         />
         <TextInput
-            placeholder="Last Name"
+            placeholder="Full Name"
             placeholderTextColor="#999"
             style={styles.input}
-            onChangeText={setLastName}
-            value={lastName}
+            onChangeText={setFullName}
+            value={fullName}
         />
-        {/* idNumber field removed from API call, keep input if needed for other purposes */}
-        {/* <TextInput
-            placeholder="ID Number (Optional)"
-            placeholderTextColor="#999"
-            style={styles.input}
-            onChangeText={setIdNumber}
-            value={idNumber}
-            keyboardType="numeric"
-        /> */}
         <TextInput
-            placeholder="Email (will be used as username)"
+            placeholder="Email Address"
             placeholderTextColor="#999"
             style={styles.input}
             onChangeText={setEmail}
@@ -195,23 +181,22 @@ export default function RegisterScreen({ navigation }) {
 // Updated Styles
 const styles = StyleSheet.create({
   scrollContainer: {
-    flexGrow: 1, // Ensures content can scroll if needed
+    flexGrow: 1, 
     justifyContent: 'center',
   },
-  innerContainer: { // Renamed container to innerContainer
+  innerContainer: { 
     padding: 24,
     backgroundColor: '#f5f7fa',
   },
   logo: {
-    width: 100, // Slightly smaller logo
+    width: 100, 
     height: 100,
     resizeMode: 'contain',
     alignSelf: 'center',
-    marginBottom: 15, // Adjusted margin
-    // marginTop: -20, // Removed negative margin
+    marginBottom: 15, 
   },
   title: {
-    fontSize: 28, // Adjusted size
+    fontSize: 28,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 8,
@@ -221,15 +206,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
-    marginBottom: 25, // Adjusted margin
+    marginBottom: 25,
   },
   input: {
     backgroundColor: '#fff',
-    paddingVertical: 12, // Adjusted padding
+    paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 10, // Slightly smaller radius
-    marginBottom: 14, // Adjusted margin
-    fontSize: 15, // Adjusted size
+    borderRadius: 10, 
+    marginBottom: 14, 
+    fontSize: 15, 
     borderWidth: 1,
     borderColor: '#ddd',
   },
@@ -237,7 +222,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1976d2',
     paddingVertical: 14,
     borderRadius: 10,
-    marginTop: 10, // Adjusted margin
+    marginTop: 10, 
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 6,
@@ -245,7 +230,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    minHeight: 48, // Adjusted height
+    minHeight: 48,
   },
   buttonDisabled: {
     backgroundColor: '#a0c3e2',
@@ -259,7 +244,7 @@ const styles = StyleSheet.create({
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 25, // Adjusted margin
+    marginTop: 25, 
   },
   loginText: {
     color: '#555',
