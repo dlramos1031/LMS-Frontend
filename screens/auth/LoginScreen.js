@@ -1,6 +1,4 @@
-// Frontend/screens/auth/LoginScreen.js
-
-import React, { useState, useEffect, useRef, useContext } // Added useContext
+import React, { useState, useEffect, useRef, useContext } 
 from 'react';
 import {
   View,
@@ -10,22 +8,18 @@ import {
   StyleSheet,
   Alert,
   Animated,
-  ActivityIndicator // Added ActivityIndicator
+  ActivityIndicator 
 } from 'react-native';
-// Removed: import { signInWithEmailAndPassword } from 'firebase/auth';
-// Removed: import { auth } from '../../config/firebase';
-import { AuthContext } from '../../navigation/AuthProvider'; // Import AuthContext
+import { AuthContext } from '../../navigation/AuthProvider'; 
 import logo from '../../assets/logo.png';
 
 export default function LoginScreen({ navigation }) {
-  const [email, setEmail] = useState(''); // Assuming email is used as username for login
+  const [username, setUsername] = useState(''); 
   const [password, setPassword] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false); // Local loading state for button
+  const [isSubmitting, setIsSubmitting] = useState(false); 
 
-  // Get login function and global loading state from AuthContext
   const { login, loading: authLoading } = useContext(AuthContext);
 
-  // --- Animation code remains the same ---
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(-30)).current;
 
@@ -43,28 +37,23 @@ export default function LoginScreen({ navigation }) {
       }),
     ]).start();
   }, []);
-  // --- End of animation code ---
 
   const handleLogin = async () => {
-    if (!email || !password) {
-        Alert.alert('Error', 'Please enter both email (username) and password.');
+    if (!username || !password) {
+        Alert.alert('Error', 'Please enter both username and password.');
         return;
     }
 
-    setIsSubmitting(true); // Start local loading
+    setIsSubmitting(true); 
     try {
-      // Use the login function from AuthContext
-      // We send the 'email' state as the 'username' parameter expected by Django
-      await login(email, password);
-      // Navigation is handled by RootNavigator automatically when the token state changes
+      await login(username, password);
     } catch (error) {
-      // Handle login errors (e.g., invalid credentials) shown to the user
-      const errorMessage = error.response?.data?.non_field_errors?.[0] || // Django standard non-field error
-                         error.response?.data?.detail || // DRF detail error
-                         'Login failed. Please check your credentials.'; // Generic fallback
+      const errorMessage = error.response?.data?.non_field_errors?.[0] ||
+                         error.response?.data?.detail || 
+                         'Login failed. Please check your credentials.';
       Alert.alert('Login Failed', errorMessage);
     } finally {
-      setIsSubmitting(false); // Stop local loading
+      setIsSubmitting(false); 
     }
   };
 
@@ -86,13 +75,12 @@ export default function LoginScreen({ navigation }) {
       <Text style={styles.subtitle}>Log in to your account</Text>
 
       <TextInput
-        placeholder="Email (as Username)" // Clarified placeholder
+        placeholder="Username" 
         placeholderTextColor="#999"
         style={styles.input}
-        onChangeText={setEmail}
-        value={email}
+        onChangeText={setUsername}
+        value={username}
         autoCapitalize="none"
-        keyboardType="email-address" // Keep email type for convenience
       />
       <TextInput
         placeholder="Password"
@@ -100,14 +88,15 @@ export default function LoginScreen({ navigation }) {
         style={styles.input}
         onChangeText={setPassword}
         value={password}
+        autoCapitalize="none"
         secureTextEntry
       />
 
       {/* Updated Login Button */}
       <TouchableOpacity
-        style={[styles.button, (isSubmitting || authLoading) && styles.buttonDisabled]} // Disable button when loading
+        style={[styles.button, (isSubmitting || authLoading) && styles.buttonDisabled]}
         onPress={handleLogin}
-        disabled={isSubmitting || authLoading} // Disable button when loading
+        disabled={isSubmitting || authLoading} 
       >
         {isSubmitting || authLoading ? (
           <ActivityIndicator size="small" color="#fff" />
