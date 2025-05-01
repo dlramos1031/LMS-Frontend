@@ -26,12 +26,14 @@ const registerForPushNotificationsAsync = async () => {
   }
 
   try {
-    // --- Step 1: Request Permissions (Crucial for iOS) --------------------------
+    // --- Step 1: Request Permissions (Crucial for iOS) ---
+    console.log('Checking notification permissions...');
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
     // If permissions not granted, ask the user
     if (existingStatus !== 'granted') {
+      console.log('Requesting notification permissions...');
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
@@ -40,32 +42,38 @@ const registerForPushNotificationsAsync = async () => {
     if (finalStatus !== 'granted') {
       alert('Failed to get push token! Notification permissions were not granted.');
       console.warn(`Notification permissions status: ${finalStatus}`);
-      return null;
+      return null; // Return null if permissions denied
     }
-    // ----------------------------------------------------------------------------
+    console.log('Notification permissions granted.');
+    // ---------------------------------------------------------
 
-    // --- Get Expo Push Token ----------------------------------------------------
+    // --- Step 2: Get Expo Push Token ---
+    console.log('Getting Expo Push Token...');
     // Retrieves the token associated with the device/app installation
     const tokenResponse = await Notifications.getExpoPushTokenAsync();
-    token = tokenResponse.data;
-    // ----------------------------------------------------------------------------
+    token = tokenResponse.data; // The actual token string
+    console.log('Obtained Expo Push Token:', token);
+    // ------------------------------------
 
-    // --- Configure Android Notification Channel (Optional but Recommended) ------
-    // Ensures notifications work correctly on Android 8.0+
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
-          importance: Notifications.AndroidImportance.MAX, 
-          vibrationPattern: [0, 250, 250, 250], 
-          lightColor: '#FF231F7C', 
+     // --- Step 3: Configure Android Notification Channel (Optional but Recommended) ---
+     // Ensures notifications work correctly on Android 8.0+
+     if (Platform.OS === 'android') {
+        console.log('Setting Android notification channel...');
+        await Notifications.setNotificationChannelAsync('default', {
+           name: 'default', // Channel ID
+           importance: Notifications.AndroidImportance.MAX, // High importance
+           vibrationPattern: [0, 250, 250, 250], // Vibration pattern
+           lightColor: '#FF231F7C', // Optional: LED color
         });
-    }
-    // ----------------------------------------------------------------------------
+        console.log('Android notification channel set.');
+     }
+     // ---------------------------------------------------------------------------
 
   } catch (error) {
+      // Catch any unexpected errors during the process
       console.error('Error during push notification registration process:', error);
       alert(`An error occurred while setting up notifications: ${error.message}`);
-      token = null;
+      token = null; // Ensure token is null on error
   }
   return token;
 };

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "502324792424",
+    "project_id": "lms-b701e",
+    "storage_bucket": "lms-b701e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:502324792424:android:8c6c1729e5692891a87fdd",
+        "android_client_info": {
+          "package_name": "com.mckel.frontend"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD9T4b-31FCqx5qDiOJA3nfFfq9DsF7L9c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

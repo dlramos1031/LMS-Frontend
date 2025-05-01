@@ -1,14 +1,18 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import {
+  View, Text, StyleSheet, TouchableOpacity, Platform,
+  Alert, ActivityIndicator, ScrollView
+} from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useNavigation, useRoute } from '@react-navigation/native'; 
-import { useSafeAreaInsets } from 'react-native-safe-area-context'; 
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import apiClient from '../services/apiClient';
-import { AuthContext } from '../navigation/AuthProvider'; 
-import { Ionicons } from '@expo/vector-icons';
+import { AuthContext } from '../navigation/AuthProvider';
+import { Ionicons } from '@expo/vector-icons'; 
 
 // Helper function to format date to YYYY-MM-DD
 const formatDate = (date) => {
+  if (!date) return '';
   const d = new Date(date);
   const year = d.getFullYear();
   const month = (`0${d.getMonth() + 1}`).slice(-2); 
@@ -17,30 +21,34 @@ const formatDate = (date) => {
 };
 
 export default function BorrowScreen() {
-  const route = useRoute(); 
+  const route = useRoute();
   const navigation = useNavigation();
-  const insets = useSafeAreaInsets(); 
+  const insets = useSafeAreaInsets();
   const { token } = useContext(AuthContext); 
   const { book } = route.params; 
 
-  const initialReturnDate = new Date();
-  initialReturnDate.setDate(initialReturnDate.getDate() + 7);
-  
-  const [returnDate, setReturnDate] = useState(initialReturnDate);
+  const initialDueDate = new Date();
+  initialDueDate.setDate(initialDueDate.getDate() + 7);
+
+  const [dueDate, setDueDate] = useState(initialDueDate); 
   const [showPicker, setShowPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const onChangeDate = (event, selectedDate) => {
-    const currentDate = selectedDate || returnDate; 
+    const currentDate = selectedDate || dueDate; 
     setShowPicker(Platform.OS === 'ios'); 
 
     const today = new Date();
     today.setHours(0, 0, 0, 0); 
+
+    // Prevent selecting past dates
     if (currentDate < today) {
-      Alert.alert("Invalid Date", "Return date cannot be in the past.");
-      setReturnDate(new Date(today.setDate(today.getDate() + 1))); 
+      Alert.alert("Invalid Date", "Due date cannot be in the past.");
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      setDueDate(tomorrow);
     } else {
-      setReturnDate(currentDate);
+      setDueDate(currentDate); 
     }
   };
 
@@ -49,39 +57,39 @@ export default function BorrowScreen() {
       Alert.alert("Login Required", "Please log in to borrow books.");
       return;
     }
-     if (!book || !book.id) {
-        Alert.alert("Error", "Book information is missing.");
-        return;
+    if (!book || !book.id) {
+      Alert.alert("Error", "Book information is missing.");
+      return;
     }
 
     setIsSubmitting(true);
+    const formattedDueDate = formatDate(dueDate);
 
-    const formattedReturnDate = formatDate(returnDate);
     try {
-      console.log(`Attempting to borrow book ID: ${book.id} with return date: ${formattedReturnDate}`);
-      const response = await apiClient.post('/borrow/borrow/', {
-        book: book.id,
-        return_date: formattedReturnDate,
+      console.log(`Attempting borrow request for book ID: ${book.id} with due date: ${formattedDueDate}`);
+      await apiClient.post('/borrow/request-borrow/', {
+        book_id: book.id, 
+        due_date: formattedDueDate,
       });
 
       Alert.alert(
         'Borrow Request Submitted',
-        `Your request to borrow "${book.title}" until ${formattedReturnDate} has been submitted.` +
-        (response.data?.status === 'pending' ? ' Please wait for librarian approval.' : '') 
+        `Your request to borrow "${book.title}" with a due date of ${formattedDueDate} has been submitted. Please wait for librarian approval.`
       );
       navigation.navigate('Tabs', { screen: 'YourBooksScreen' }); 
 
     } catch (error) {
-      console.error("Borrow failed:", error.response?.data || error);
+      console.error("Borrow request failed:", error.response?.data || error.message);
       let errorMessage = 'Could not submit borrow request.';
       if (error.response?.data) {
          const errors = error.response.data;
-         if (errors.error) { 
+         if (errors.error) {
              errorMessage = errors.error;
          } else {
-             const errorMessages = Object.keys(errors).map(key => `${key}: ${errors[key].join(', ')}`);
+             const errorMessages = Object.keys(errors)
+                .map(key => `${key}: ${Array.isArray(errors[key]) ? errors[key].join(', ') : errors[key]}`);
              if (errorMessages.length > 0) errorMessage = errorMessages.join('\n');
-             else if (errors.detail) errorMessage = errors.detail;
+             else if (errors.detail) errorMessage = errors.detail; 
          }
       }
       Alert.alert('Borrow Failed', errorMessage);
@@ -93,29 +101,34 @@ export default function BorrowScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
         <ScrollView contentContainerStyle={styles.scrollContainer}>
-            <Text style={styles.headerTitle}>Borrow Book</Text>
+            {/* Header */}
+            <Text style={styles.headerTitle}>Request to Borrow</Text>
+
+            {/* Book Info Display */}
             <View style={styles.bookInfo}>
                 <Text style={styles.titleLabel}>Book Title:</Text>
                 <Text style={styles.title}>{book?.title || 'N/A'}</Text>
+                {/* Add other book details if desired */}
             </View>
 
-            <Text style={styles.label}>Select Return Date:</Text>
+            {/* Date Selection Label */}
+            <Text style={styles.label}>Select Due Date:</Text>
 
             {/* Button to open date picker */}
             <TouchableOpacity onPress={() => setShowPicker(true)} style={styles.dateDisplay}>
                 <Ionicons name="calendar-outline" size={20} color="#4A5568" />
-                <Text style={styles.dateText}>{returnDate.toDateString()}</Text>
+                <Text style={styles.dateText}>{dueDate.toDateString()}</Text>
             </TouchableOpacity>
 
-            {/* Show DateTimePicker when state is true */}
+            {/* Date Picker Component */}
             {showPicker && (
                 <DateTimePicker
-                    value={returnDate}
+                    value={dueDate}
                     mode="date"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={onChangeDate}
-                    minimumDate={new Date()} // Prevent selecting past dates
-                    // maximumDate={ // Optional: Set a max borrow duration limit }
+                    minimumDate={new Date()}
+                    // maximumDate={...} // Optional: Set a max borrow duration
                 />
             )}
 
@@ -126,13 +139,13 @@ export default function BorrowScreen() {
                 disabled={isSubmitting}
             >
                 {isSubmitting ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                    <Text style={styles.borrowText}>Confirm Borrow Request</Text>
+                    <Text style={styles.borrowText}>Submit Borrow Request</Text>
                 )}
             </TouchableOpacity>
 
-             {/* Back Button */}
+             {/* Cancel/Back Button */}
             <TouchableOpacity
                 style={styles.backButton}
                 onPress={() => navigation.goBack()}
