@@ -18,13 +18,14 @@ export default function BookCarousel({ filter, queryText = '', onBookPress }) {
     let url = '/books/';
     const params = {};
 
-    // Construct URL and params based on filter type
     if (filter === 'search' && queryText) {
       params.search = queryText;
     } else if (filter === 'genre' && queryText) {
       params.genre = queryText;
     } else if (filter === 'favorites') {
       params.is_favorite = true; 
+    } else if (filter === 'available') {
+      params.limit = 10;
     } else if (filter === 'recommended') {
       params.limit = 10;
     }

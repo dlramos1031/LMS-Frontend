@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  SafeAreaView,
   ActivityIndicator,
   Platform,
 } from 'react-native';
@@ -27,10 +26,9 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const { user, token } = useContext(AuthContext);
 
-  // Function to check if user has any favorite books via API
    const checkFavorites = useCallback(async () => {
     if (!token) {
-      setHasFavorites(false); // Ensure favorites is false if not logged in
+      setHasFavorites(false); 
       return;
     }
     try {
@@ -38,42 +36,36 @@ export default function HomeScreen() {
       setHasFavorites(response.data.results?.length > 0 || response.data?.length > 0);
     } catch (error) {
       console.error('Failed to check for favorites:', error);
-      setHasFavorites(false); // Assume no favorites on error
+      setHasFavorites(false); 
     }
   }, [token]);
 
   useEffect(() => {
-    // Set user name from Auth context
     if (user) {
-      setUserName(user.full_name || user.username || ''); // Use full_name or fallback to username
+      setUserName(user.full_name || user.username || '');
       setInitialLoading(false);
     } else {
-      // Handle user being logged out or not yet loaded
       setUserName('');
-      setHasFavorites(false); // Ensure favorites cleared on logout
+      setHasFavorites(false); 
       setInitialLoading(false);
     }
-  }, [user]); // Re-run when user context changes
+  }, [user]); 
 
-  // Use useFocusEffect to check for favorites when the screen comes into focus
   useFocusEffect(
       useCallback(() => {
-          if(user) { // Only check if user is logged in
+          if(user) { 
               checkFavorites();
           } else {
-              setHasFavorites(false); // No favorites if not logged in
+              setHasFavorites(false); 
           }
       }, [user, checkFavorites])
   );
 
 
   const handleBookPress = (book) => {
-    // Navigate to BookDetailsScreen, passing the book object received from API
-    // Ensure the receiving screen handles the data structure correctly
     navigation.navigate('BookDetailsScreen', { book });
   };
 
-  // Show main loader only if initial load AND user data isn't set yet
   if (initialLoading) {
     return (
       <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
@@ -86,7 +78,7 @@ export default function HomeScreen() {
     <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
       <ScrollView
         contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled" // Dismiss keyboard on tap outside input
+        keyboardShouldPersistTaps="handled" 
       >
         <View style={styles.searchContainer}>
           <Ionicons name="search-outline" size={20} color="#999" style={styles.searchIcon} />
@@ -96,25 +88,23 @@ export default function HomeScreen() {
             value={search}
             onChangeText={setSearch}
             placeholderTextColor="#aaa"
-            returnKeyType="search" // Set keyboard return key
+            returnKeyType="search" 
           />
         </View>
 
         {/* Conditional Rendering based on search */}
         {search.trim().length > 0 ? (
-          // Show Search Results Carousel
           <View style={styles.section}>
             <Text style={styles.heading}>
               <Ionicons name="search" size={18} /> Search Results
             </Text>
             <BookCarousel
               filter="search"
-              queryText={search.trim()} // Pass search query directly
+              queryText={search.trim()} 
               onBookPress={handleBookPress}
             />
           </View>
         ) : (
-          // Show Default Carousels (Favorites, Recommended, Genres)
           <>
             {/* Favorites Section - Conditionally rendered */}
             {hasFavorites && (
@@ -123,7 +113,7 @@ export default function HomeScreen() {
                   <MaterialCommunityIcons name="heart-outline" size={18} color="#555" /> Favorites
                 </Text>
                 <BookCarousel
-                  filter="favorites" // Will use API filter /books/?is_favorite=true
+                  filter="favorites" 
                   onBookPress={handleBookPress}
                 />
               </View>
@@ -137,10 +127,17 @@ export default function HomeScreen() {
               <BookCarousel filter="recommended" onBookPress={handleBookPress} />
             </View>
 
+            {/* Available to Borrow Section */}
+            <View style={styles.section}>
+              <Text style={styles.heading}>
+                <MaterialCommunityIcons name="book-variant" size={18} color="#555" /> Available to Borrow
+              </Text>
+              <BookCarousel filter="available" onBookPress={handleBookPress} />
+            </View>
+
             {/* Genre Sections */}
             <GenreSection icon="book-open-page-variant" label="Comics" query="comics" onBookPress={handleBookPress} />
-            <GenreSection icon="school-outline" label="Educational" query="educational" onBookPress={handleBookPress} />
-            <GenreSection icon="feather" label="Fictions" query="fictions" onBookPress={handleBookPress} />
+            <GenreSection icon="feather" label="Fiction" query="fiction" onBookPress={handleBookPress} />
             <GenreSection icon="magnify" label="Mystery" query="mystery" onBookPress={handleBookPress} />
           </>
         )}
