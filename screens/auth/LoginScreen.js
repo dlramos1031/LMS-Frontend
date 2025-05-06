@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } 
+from 'react';
 import {
   View,
   Text,
@@ -7,14 +8,17 @@ import {
   StyleSheet,
   Alert,
   Animated,
+  ActivityIndicator 
 } from 'react-native';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../../config/firebase';
+import { AuthContext } from '../../navigation/AuthProvider'; 
 import logo from '../../assets/logo.png';
 
 export default function LoginScreen({ navigation }) {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState(''); 
   const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false); 
+
+  const { login, loading: authLoading } = useContext(AuthContext);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(-30)).current;
@@ -35,10 +39,21 @@ export default function LoginScreen({ navigation }) {
   }, []);
 
   const handleLogin = async () => {
+    if (!username || !password) {
+        Alert.alert('Error', 'Please enter both username and password.');
+        return;
+    }
+
+    setIsSubmitting(true); 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await login(username, password);
     } catch (error) {
-      Alert.alert('Login Failed', error.message);
+      const errorMessage = error.response?.data?.non_field_errors?.[0] ||
+                         error.response?.data?.detail || 
+                         'Login failed. Please check your credentials.';
+      Alert.alert('Login Failed', errorMessage);
+    } finally {
+      setIsSubmitting(false); 
     }
   };
 
@@ -60,13 +75,12 @@ export default function LoginScreen({ navigation }) {
       <Text style={styles.subtitle}>Log in to your account</Text>
 
       <TextInput
-        placeholder="Email"
+        placeholder="Username" 
         placeholderTextColor="#999"
         style={styles.input}
-        onChangeText={setEmail}
-        value={email}
+        onChangeText={setUsername}
+        value={username}
         autoCapitalize="none"
-        keyboardType="email-address"
       />
       <TextInput
         placeholder="Password"
@@ -74,11 +88,21 @@ export default function LoginScreen({ navigation }) {
         style={styles.input}
         onChangeText={setPassword}
         value={password}
+        autoCapitalize="none"
         secureTextEntry
       />
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
+      {/* Updated Login Button */}
+      <TouchableOpacity
+        style={[styles.button, (isSubmitting || authLoading) && styles.buttonDisabled]}
+        onPress={handleLogin}
+        disabled={isSubmitting || authLoading} 
+      >
+        {isSubmitting || authLoading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Login</Text>
+        )}
       </TouchableOpacity>
 
       <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
@@ -141,6 +165,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 2,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 50,
+  },
+   buttonDisabled: {
+    backgroundColor: '#a0c3e2',
   },
   buttonText: {
     color: '#fff',

@@ -1,70 +1,85 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext, useCallback } from 'react'; 
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TextInput,
-  SafeAreaView,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
-import { doc, getDoc } from 'firebase/firestore';
-import { useNavigation } from '@react-navigation/native';
-import { auth, db } from '../config/firebase';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native'; 
+import { AuthContext } from '../navigation/AuthProvider'; 
+import apiClient from '../services/apiClient'; 
 import BookCarousel from '../components/BookCarousel';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
+
   const [search, setSearch] = useState('');
   const [userName, setUserName] = useState('');
-  const [loadingUser, setLoadingUser] = useState(true);
-  const [favorites, setFavorites] = useState([]);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [hasFavorites, setHasFavorites] = useState(false); 
 
   const navigation = useNavigation();
+  const { user, token } = useContext(AuthContext);
+
+   const checkFavorites = useCallback(async () => {
+    if (!token) {
+      setHasFavorites(false); 
+      return;
+    }
+    try {
+      const response = await apiClient.get('/books/', { params: { is_favorite: true, limit: 1 } });
+      setHasFavorites(response.data.results?.length > 0 || response.data?.length > 0);
+    } catch (error) {
+      console.error('Failed to check for favorites:', error);
+      setHasFavorites(false); 
+    }
+  }, [token]);
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const uid = auth.currentUser?.uid;
-        if (uid) {
-          const userRef = doc(db, 'users', uid);
-          const userSnap = await getDoc(userRef);
+    if (user) {
+      setUserName(user.full_name || user.username || '');
+      setInitialLoading(false);
+    } else {
+      setUserName('');
+      setHasFavorites(false); 
+      setInitialLoading(false);
+    }
+  }, [user]); 
 
-          if (userSnap.exists()) {
-            const data = userSnap.data();
-            setUserName(data.name || '');
-            setFavorites(data.favorites || []);
+  useFocusEffect(
+      useCallback(() => {
+          if(user) { 
+              checkFavorites();
+          } else {
+              setHasFavorites(false); 
           }
-        }
-      } catch (error) {
-        console.error('Failed to fetch user data:', error);
-      } finally {
-        setLoadingUser(false);
-      }
-    };
+      }, [user, checkFavorites])
+  );
 
-    fetchUserData();
-  }, []);
 
   const handleBookPress = (book) => {
     navigation.navigate('BookDetailsScreen', { book });
   };
 
-  if (loadingUser) {
+  if (initialLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" />
-      </SafeAreaView>
+      <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color="#1976d2"/>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.greeting}>
-          Welcome back, <Text style={styles.name}>{userName}</Text> 👋
-        </Text>
-
+    <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled" 
+      >
         <View style={styles.searchContainer}>
           <Ionicons name="search-outline" size={20} color="#999" style={styles.searchIcon} />
           <TextInput
@@ -73,9 +88,11 @@ export default function HomeScreen() {
             value={search}
             onChangeText={setSearch}
             placeholderTextColor="#aaa"
+            returnKeyType="search" 
           />
         </View>
 
+        {/* Conditional Rendering based on search */}
         {search.trim().length > 0 ? (
           <View style={styles.section}>
             <Text style={styles.heading}>
@@ -83,27 +100,26 @@ export default function HomeScreen() {
             </Text>
             <BookCarousel
               filter="search"
-              queryText={search.trim().toLowerCase()}
+              queryText={search.trim()} 
               onBookPress={handleBookPress}
             />
           </View>
         ) : (
           <>
-            {/* 🧡 Favorites Section */}
-            {favorites.length > 0 && (
+            {/* Favorites Section - Conditionally rendered */}
+            {hasFavorites && (
               <View style={styles.section}>
                 <Text style={styles.heading}>
                   <MaterialCommunityIcons name="heart-outline" size={18} color="#555" /> Favorites
                 </Text>
                 <BookCarousel
-                  filter="favorites"
-                  favoriteIds={favorites}  // Pass favorites list to BookCarousel
+                  filter="favorites" 
                   onBookPress={handleBookPress}
                 />
               </View>
             )}
 
-            {/* 🎯 Recommended Section */}
+            {/* Recommended Section */}
             <View style={styles.section}>
               <Text style={styles.heading}>
                 <MaterialCommunityIcons name="star-outline" size={18} color="#555" /> Recommended
@@ -111,15 +127,22 @@ export default function HomeScreen() {
               <BookCarousel filter="recommended" onBookPress={handleBookPress} />
             </View>
 
-            {/* 🔖 Genre Sections */}
+            {/* Available to Borrow Section */}
+            <View style={styles.section}>
+              <Text style={styles.heading}>
+                <MaterialCommunityIcons name="book-variant" size={18} color="#555" /> Available to Borrow
+              </Text>
+              <BookCarousel filter="available" onBookPress={handleBookPress} />
+            </View>
+
+            {/* Genre Sections */}
             <GenreSection icon="book-open-page-variant" label="Comics" query="comics" onBookPress={handleBookPress} />
-            <GenreSection icon="school-outline" label="Educational" query="educational" onBookPress={handleBookPress} />
-            <GenreSection icon="feather" label="Fictions" query="fictions" onBookPress={handleBookPress} />
+            <GenreSection icon="feather" label="Fiction" query="fiction" onBookPress={handleBookPress} />
             <GenreSection icon="magnify" label="Mystery" query="mystery" onBookPress={handleBookPress} />
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -135,16 +158,23 @@ function GenreSection({ icon, label, query, onBookPress }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f4f6f9' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#f4f6f9' 
+  }, 
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   scroll: {
     padding: 16,
-    paddingTop: 50,
   },
   greeting: {
     fontSize: 24,
     fontWeight: '600',
-    marginBottom: 12,
+    marginBottom: 16, 
     color: '#333',
+    marginTop: Platform.OS === 'android' ? 10 : 0,
   },
   name: {
     color: '#1976d2',
@@ -159,7 +189,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 28,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#e0e0e0', 
   },
   searchIcon: {
     marginRight: 8,
@@ -177,5 +207,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
     color: '#444',
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: 16,
   },
-});  
+});

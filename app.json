@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Authors Lib",
+    "name": "Author's Lib",
     "slug": "authorslib",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -20,7 +20,8 @@
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.mckel.frontend"
+      "package": "com.mckel.frontend",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/logo.png"

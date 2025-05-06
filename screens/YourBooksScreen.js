@@ -1,187 +1,225 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { auth, db } from '../config/firebase';
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  updateDoc,
-  deleteDoc,
-} from 'firebase/firestore';
+import React, { useState, useCallback, useContext } from 'react';
+import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import apiClient from '../services/apiClient'; 
+import { AuthContext } from '../navigation/AuthProvider'; 
+
+const DEFAULT_COVER = 'https://via.placeholder.com/150/CCCCCC/FFFFFF?text=No+Cover';
 
 export default function YourBooksScreen() {
-  const [current, setCurrent] = useState([]);
-  const [history, setHistory] = useState([]);
+  const [current, setCurrent] = useState([]); 
+  const [history, setHistory] = useState([]); 
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('current');
+  const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('current'); 
+  const [cancellingBookId, setCancellingBookId] = useState(null); 
+
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets(); 
+  const { token } = useContext(AuthContext); 
 
-  const fetchBorrowedBooks = async () => {
+  const fetchBorrowedBooks = useCallback(async () => {
+    if (!token) {
+        setLoading(false);
+        setError("Please log in to view your books.");
+        setCurrent([]);
+        setHistory([]);
+        return;
+    }
+
+    setLoading(true); 
+    setError(null); 
+
     try {
-      setLoading(true);
-      const q = query(
-        collection(db, 'borrowedBooks'),
-        where('userId', '==', auth.currentUser.uid)
-      );
-      const querySnapshot = await getDocs(q);
-
+      console.log("Fetching borrowed books from API endpoint: /borrow/");
+      const response = await apiClient.get('/borrow/'); 
+      const allBorrowed = response.data || [];
       const currentBorrowed = [];
       const pastBorrowed = [];
 
-      for (const docSnap of querySnapshot.docs) {
-        const data = docSnap.data();
-        const bookSnap = await getDoc(doc(db, 'books', data.bookId));
-        if (!bookSnap.exists()) continue;
-
-        const bookData = {
-          id: data.bookId,
-          borrowedId: docSnap.id,
-          ...bookSnap.data(),
-          ...data,
-        };
-
-        if (data.returnedAt) {
-          pastBorrowed.push(bookData);
-        } else {
-          currentBorrowed.push(bookData);
+      allBorrowed.forEach((item) => {
+        console.log("Book:", item.book.title, ", Status:", item.status, ", Return Date:", item.actual_return_date);
+        if ((item.status === 'pending' || item.status === 'approved') && item.actual_return_date === null) {
+            currentBorrowed.push(item);
         }
-      }
+        else {
+            pastBorrowed.push(item);
+        }
+      });
 
       setCurrent(currentBorrowed);
       setHistory(pastBorrowed);
-    } catch (error) {
-      console.error('Error fetching borrowed books:', error);
+      console.log("Fetched current:", currentBorrowed.length, "Fetched history:", pastBorrowed.length);
+
+    } catch (err) {
+      console.error('Error fetching borrowed books:', err.response?.data || err.message);
+      setError("Failed to load borrowed books. Please try again.");
+      setCurrent([]);
+      setHistory([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]); 
 
-  const returnBook = async (book) => {
-    try {
-      await updateDoc(doc(db, 'borrowedBooks', book.borrowedId), {
-        returnedAt: new Date(),
-      });
-      await updateDoc(doc(db, 'books', book.id), {
-        available: true,
-      });
+  useFocusEffect(
+    useCallback(() => {
+      console.log("YourBooksScreen focused, fetching data...");
       fetchBorrowedBooks();
-    } catch (error) {
-      console.error('Error returning book:', error);
-    }
-  };
+    }, [fetchBorrowedBooks]) 
+  );
 
-  const clearHistory = async () => {
+  const cancelBorrowRequest = async (borrowingId) => {
+    if (!borrowingId) return;
+
+    // Confirm cancel request
     Alert.alert(
-      'Clear History',
-      'Are you sure you want to delete your borrowing history?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              for (const item of history) {
-                await deleteDoc(doc(db, 'borrowedBooks', item.borrowedId));
-              }
-              fetchBorrowedBooks();
-            } catch (error) {
-              console.error('Error clearing history:', error);
-            }
-          },
-        },
-      ]
+        "Cancel Request",
+        "Are you sure you want to cancel this borrow request?",
+        [
+            { text: "No", style: "cancel" },
+            {
+                text: "Yes",
+                onPress: async () => {
+                    setCancellingBookId(borrowingId);
+                    setError(null);
+                    try {
+                        console.log(`Attempting DELETE to /borrow/${borrowingId}/cancel-request/`);
+                        await apiClient.delete(`/borrow/${borrowingId}/cancel-request/`);
+                        Alert.alert('Success', 'Borrow request cancelled successfully.');
+                        fetchBorrowedBooks(); 
+                    } catch (error) {
+                        console.error('Error cancelling borrow request:', error.response?.data || error.message);
+                        let errorMessage = 'Could not cancel request.';
+                        if (error.response?.data?.detail) errorMessage = error.response.data.detail;
+                        else if (error.response?.data?.error) errorMessage = error.response.data.error;
+                        setError(errorMessage); 
+                        Alert.alert('Cancellation Failed', errorMessage);
+                    } finally {
+                        setCancellingBookId(null); 
+                    }
+                },
+                style: "destructive",
+            },
+        ]
     );
   };
 
-  useEffect(() => {
-    fetchBorrowedBooks();
-  }, []);
+  const renderBookItem = ({ item }) => {
+    const book = item.book;
+    const bookData = book;
+    const coverImageUrl = bookData?.cover_image || DEFAULT_COVER;
 
-  const renderBook = ({ item }) => (
-    <View style={styles.card}>
-      <Image source={{ uri: item.coverImage }} style={styles.cover} />
-      <View style={{ flex: 1, marginLeft: 12 }}>
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.subtitle}>{item.author}</Text>
-        <Text style={styles.date}>Borrowed: {item.borrowedAt?.toDate().toDateString()}</Text>
-        {item.returnedAt && (
-          <Text style={styles.date}>Returned: {item.returnedAt.toDate().toDateString()}</Text>
-        )}
-        {!item.returnedAt && (
-          <TouchableOpacity style={styles.button} onPress={() => returnBook(item)}>
-            <Text style={styles.buttonText}>Return Book</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
-  );
+    const formattedBorrowDate = item.borrow_date ? new Date(item.borrow_date).toLocaleDateString() : 'N/A';
+    const formattedDueDate = item.due_date ? new Date(item.due_date).toLocaleDateString() : 'N/A';
+    const formattedActualReturnDate = item.actual_return_date ? new Date(item.actual_return_date).toLocaleDateString() : 'N/A';
 
+    const showCancelButton = item.status === 'pending';
+    const isCurrentlyCancelling = cancellingBookId === item.id;
+
+    return (
+        <TouchableOpacity
+            style={styles.card}
+            onPress={() => navigation.navigate('BookDetailsScreen', { book })}
+            
+        >
+            <Image source={{ uri: coverImageUrl }} style={styles.cover} onError={(e) => console.log("Failed to load image:", e.nativeEvent.error)} />
+            <View style={styles.bookDetails}>
+                <Text style={styles.title} numberOfLines={2}>{bookData?.title || 'Unknown Title'}</Text>
+                <Text style={styles.subtitle} numberOfLines={1}>
+                    by {bookData?.authors?.length > 0 ? bookData.authors.map(a => a.name).join(', ') : 'Unknown Author'}
+                </Text>
+                <Text style={styles.status}>Status: <Text style={styles.statusText(item.status)}>{item.status}</Text></Text>
+                <Text style={styles.date}>Requested: {formattedBorrowDate}</Text>
+
+                {(item.status === 'pending' || item.status === 'approved') && !item.actual_return_date &&
+                 <Text style={styles.date}>Due: {formattedDueDate}</Text>
+                }
+                {item.status === 'returned' && item.actual_return_date &&
+                 <Text style={styles.date}>Returned: {formattedActualReturnDate}</Text>
+                }
+                {item.is_overdue && <Text style={styles.overdueBadge}>OVERDUE</Text>}
+                
+                {/* Cancel Button */}
+                {showCancelButton && (
+                    <TouchableOpacity
+                        style={[styles.cancelButton, isCurrentlyCancelling && styles.buttonDisabled]}
+                        onPress={() => cancelBorrowRequest(item.id)} 
+                        disabled={isCurrentlyCancelling}
+                    >
+                        {isCurrentlyCancelling ? (
+                            <ActivityIndicator size="small" color="#DC2626" /> 
+                        ) : (
+                            <Text style={styles.cancelButtonText}>Cancel Request</Text>
+                        )}
+                    </TouchableOpacity>
+                )}
+            </View>
+        </TouchableOpacity>
+    );
+  };
+  
   const activeData = activeTab === 'current' ? current : history;
 
-  if (loading) return <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#4a90e2" />;
-
   return (
-    <View style={styles.container}>
-      <TouchableOpacity
-        onPress={() => navigation.navigate('Tabs', { screen: 'Home' })}
-        style={styles.homeButton}
-      >
-        <Text style={styles.homeButtonText}>← Back to Home</Text>
-      </TouchableOpacity>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
 
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'current' && styles.activeTab]}
-          onPress={() => setActiveTab('current')}
-        >
-          <Text style={[styles.tabText, activeTab === 'current' && styles.activeTabText]}>
-            Currently Borrowed
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'history' && styles.activeTab]}
-          onPress={() => setActiveTab('history')}
-        >
-          <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>
-            History
-          </Text>
-        </TouchableOpacity>
-      </View>
+        {/* Header */}
+        <View style={styles.header}>
+             <Text style={styles.headerTitle}>Your Books</Text>
+        </View>
 
-      <FlatList
-        data={activeData}
-        keyExtractor={(item) => item.borrowedId}
-        renderItem={renderBook}
-        ListEmptyComponent={
-          <Text style={styles.empty}>
-            {activeTab === 'current'
-              ? 'No books currently borrowed.'
-              : 'No borrowing history yet.'}
-          </Text>
-        }
-        contentContainerStyle={{ paddingBottom: 20 }}
-        showsVerticalScrollIndicator={false}
-      />
+        {/* Tabs for Current/History */}
+        <View style={styles.tabs}>
+            <TouchableOpacity
+                style={[styles.tab, activeTab === 'current' && styles.activeTab]}
+                onPress={() => setActiveTab('current')}
+            >
+                <Text style={[styles.tabText, activeTab === 'current' && styles.activeTabText]}>
+                    Current ({current.length})
+                </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+                style={[styles.tab, activeTab === 'history' && styles.activeTab]}
+                onPress={() => setActiveTab('history')}
+            >
+                <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>
+                    History ({history.length})
+                </Text>
+            </TouchableOpacity>
+        </View>
 
-      {activeTab === 'history' && history.length > 0 && (
-        <TouchableOpacity onPress={clearHistory} style={styles.clearButton}>
-          <Text style={styles.clearText}>Clear History</Text>
-        </TouchableOpacity>
-      )}
+         {/* Error Display Area */}
+         {error && !loading && (
+            <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity onPress={fetchBorrowedBooks} style={styles.retryButton}>
+                     <Text style={styles.retryButtonText}>Retry</Text>
+                </TouchableOpacity>
+            </View>
+         )}
+
+        {/* Loading Indicator or Book List */}
+        {loading ? (
+            <ActivityIndicator style={styles.loader} size="large" color="#4A90E2" />
+        ) : (
+            <FlatList
+                data={activeData}
+                keyExtractor={(item) => `borrow-${item.id}`}
+                renderItem={renderBookItem}
+                ListEmptyComponent={
+                    <View style={styles.emptyContainer}>
+                        <Text style={styles.emptyText}>
+                            {activeTab === 'current'
+                            ? 'You have no pending or currently borrowed books.'
+                            : 'No borrowing history found.'}
+                        </Text>
+                    </View>
+                }
+                contentContainerStyle={styles.listPadding}
+                showsVerticalScrollIndicator={false}
+            />
+        )}
     </View>
   );
 }
@@ -190,8 +228,55 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f4f6f8',
-    padding: 16,
-    paddingTop: 40,
+  },
+  header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 15, 
+      paddingBottom: 10,
+      backgroundColor: '#fff', 
+      borderBottomWidth: 1,
+      borderBottomColor: '#e2e8f0',
+  },
+  headerTitle: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: '#1a202c',
+  },
+  clearText: {
+    color: '#d9534f', 
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  tabs: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    marginBottom: 10, 
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 14, 
+    alignItems: 'center',
+    borderBottomWidth: 3, 
+    borderBottomColor: 'transparent', 
+  },
+  activeTab: {
+    borderBottomColor: '#4a90e2', 
+  },
+  tabText: {
+    fontWeight: '600',
+    color: '#64748b', 
+    fontSize: 15,
+  },
+  activeTabText: {
+    color: '#4a90e2', 
+  },
+  listPadding: {
+      paddingHorizontal: 16,
+      paddingBottom: 20,
   },
   card: {
     flexDirection: 'row',
@@ -206,24 +291,51 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cover: {
-    width: 70,
-    height: 100,
+    width: 75, 
+    height: 110,
     borderRadius: 8,
-    backgroundColor: '#eee',
+    backgroundColor: '#e0e0e0', 
+    marginRight: 14,
+  },
+  bookDetails: {
+      flex: 1, 
+      justifyContent: 'space-between', 
   },
   title: {
     fontWeight: 'bold',
-    fontSize: 17,
+    fontSize: 16, 
     color: '#333',
+    marginBottom: 2,
   },
   subtitle: {
     color: '#666',
-    marginTop: 2,
+    fontSize: 14, 
+    marginBottom: 6,
   },
   date: {
     fontSize: 12,
-    color: '#999',
-    marginTop: 4,
+    color: '#718096', 
+    marginTop: 2,
+  },
+  statusText: (status) => ({ 
+    fontWeight: 'bold',
+    textTransform: 'capitalize',
+    color: status === 'approved' ? '#10B981' 
+         : status === 'pending' ? '#F59E0B' 
+         : status === 'returned' ? '#6B7280'
+         : status === 'rejected' ? '#EF4444' 
+         : '#4B5563', 
+  }),
+   overdueBadge: {
+      backgroundColor: '#C53030',
+      color: '#fff',
+      fontSize: 10,
+      fontWeight: 'bold',
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+      marginTop: 4,
+      alignSelf: 'flex-start', 
   },
   button: {
     marginTop: 10,
@@ -233,57 +345,45 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    minHeight: 36,
+    minWidth: 100, 
   },
   buttonText: {
     color: '#fff',
     fontWeight: '600',
   },
+  cancelButton: {
+    marginTop: 10,
+    backgroundColor: '#E53E3E', 
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    minHeight: 36,
+    minWidth: 100,
+  },
+  cancelButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  buttonDisabled: { 
+    opacity: 0.6, 
+  },
   empty: {
     textAlign: 'center',
-    marginTop: 30,
+    marginTop: 50,
     fontSize: 16,
     color: '#888',
   },
-  tabs: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    backgroundColor: '#dde3eb',
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  activeTab: {
-    backgroundColor: '#4a90e2',
-  },
-  tabText: {
-    fontWeight: '600',
-    color: '#444',
-  },
-  activeTabText: {
-    color: '#fff',
-  },
-  clearButton: {
-    backgroundColor: '#d9534f',
-    padding: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 14,
-  },
-  clearText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  homeButton: {
-    alignSelf: 'flex-start',
-    marginBottom: 16,
-  },
-  homeButtonText: {
-    color: '#4a90e2',
-    fontWeight: '600',
-    fontSize: 16,
+  errorText: {
+      textAlign: 'center',
+      color: 'red',
+      marginVertical: 10,
+      paddingHorizontal: 16,
   },
 });

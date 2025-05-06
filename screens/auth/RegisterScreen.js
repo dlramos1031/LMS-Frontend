@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } 
+from 'react';
 import {
   View,
   Text,
@@ -7,18 +8,22 @@ import {
   StyleSheet,
   Alert,
   Animated,
+  ActivityIndicator, 
+  ScrollView 
 } from 'react-native';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../../config/firebase';
+import { AuthContext } from '../../navigation/AuthProvider';
 import logo from '../../assets/logo.png';
 
 export default function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [idNumber, setIdNumber] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState(''); 
+  const [fullName, setFullName] = useState('');
+
+  const [isSubmitting, setIsSubmitting] = useState(false); 
+
+  const { register, loading: authLoading } = useContext(AuthContext);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(-30)).current;
@@ -39,113 +44,144 @@ export default function RegisterScreen({ navigation }) {
   }, []);
 
   const handleRegister = async () => {
+    if (!username || !fullName || !email || !password || !confirmPassword) {
+      Alert.alert('Error', 'Please fill in all required fields.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match.');
+      return;
+    }
+
+    const registrationData = {
+      username: username, 
+      full_name: fullName,
+      email: email,
+      password: password,
+      confirm_password: confirmPassword,
+    };
+
+    setIsSubmitting(true);
     try {
-      if (!email || !password || !firstName || !lastName || !idNumber) {
-        Alert.alert('Error', 'All fields are required.');
-        return;
-      }
-
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      await setDoc(doc(db, 'users', userCredential.user.uid), {
-        email,
-        name: `${firstName} ${lastName}`,
-        idNumber,
-        createdAt: serverTimestamp(),
-      });
-
-      Alert.alert('Success', 'Account created!');
+      await register(registrationData);
     } catch (error) {
-      Alert.alert('Registration Failed', error.message);
+        let errorMessage = 'Registration failed. Please try again.';
+        if (error.response?.data) {
+            const errors = error.response.data;
+            const errorMessages = Object.keys(errors).map(key => `${key}: ${errors[key].join(', ')}`);
+            if (errorMessages.length > 0) {
+                errorMessage = errorMessages.join('\n');
+            } else if (errors.detail) {
+                 errorMessage = errors.detail;
+            }
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        Alert.alert('Registration Failed', errorMessage);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Animated.Image
-        source={logo}
-        style={[
-          styles.logo,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
-      />
+    <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+        <View style={styles.innerContainer}>
+        <Animated.Image
+            source={logo}
+            style={[
+            styles.logo,
+            {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+            },
+            ]}
+        />
 
-      <Text style={styles.title}>Create Account</Text>
-      <Text style={styles.subtitle}>Sign up to get started</Text>
+        <Text style={styles.title}>Create Account</Text>
+        <Text style={styles.subtitle}>Sign up to get started</Text>
 
-      <TextInput
-        placeholder="First Name"
-        placeholderTextColor="#999"
-        style={styles.input}
-        onChangeText={setFirstName}
-        value={firstName}
-      />
-      <TextInput
-        placeholder="Last Name"
-        placeholderTextColor="#999"
-        style={styles.input}
-        onChangeText={setLastName}
-        value={lastName}
-      />
-      <TextInput
-        placeholder="ID Number"
-        placeholderTextColor="#999"
-        style={styles.input}
-        onChangeText={setIdNumber}
-        value={idNumber}
-        keyboardType="numeric"
-      />
-      <TextInput
-        placeholder="Email"
-        placeholderTextColor="#999"
-        style={styles.input}
-        onChangeText={setEmail}
-        value={email}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-      <TextInput
-        placeholder="Password"
-        placeholderTextColor="#999"
-        secureTextEntry
-        style={styles.input}
-        onChangeText={setPassword}
-        value={password}
-      />
+        {/* Input fields */}
+        <TextInput
+            placeholder="Username"
+            placeholderTextColor="#999"
+            style={styles.input}
+            onChangeText={setUsername}
+            value={username}
+        />
+        <TextInput
+            placeholder="Full Name"
+            placeholderTextColor="#999"
+            style={styles.input}
+            onChangeText={setFullName}
+            value={fullName}
+        />
+        <TextInput
+            placeholder="Email Address"
+            placeholderTextColor="#999"
+            style={styles.input}
+            onChangeText={setEmail}
+            value={email}
+            autoCapitalize="none"
+            keyboardType="email-address"
+        />
+        <TextInput
+            placeholder="Password"
+            placeholderTextColor="#999"
+            secureTextEntry
+            style={styles.input}
+            onChangeText={setPassword}
+            value={password}
+        />
+        <TextInput
+            placeholder="Confirm Password"
+            placeholderTextColor="#999"
+            secureTextEntry
+            style={styles.input}
+            onChangeText={setConfirmPassword}
+            value={confirmPassword}
+        />
 
-      <TouchableOpacity style={styles.button} onPress={handleRegister}>
-        <Text style={styles.buttonText}>Register</Text>
-      </TouchableOpacity>
-
-      <View style={styles.loginContainer}>
-        <Text style={styles.loginText}>Already have an account? </Text>
-        <TouchableOpacity onPress={() => navigation.canGoBack() && navigation.goBack()}>
-          <Text style={styles.loginLink}>Login</Text>
+        <TouchableOpacity
+            style={[styles.button, (isSubmitting || authLoading) && styles.buttonDisabled]}
+            onPress={handleRegister}
+            disabled={isSubmitting || authLoading}
+        >
+            {isSubmitting || authLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+            ) : (
+            <Text style={styles.buttonText}>Register</Text>
+            )}
         </TouchableOpacity>
-      </View>
-    </View>
+
+        <View style={styles.loginContainer}>
+            <Text style={styles.loginText}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.canGoBack() && navigation.goBack()}>
+            <Text style={styles.loginLink}>Login</Text>
+            </TouchableOpacity>
+        </View>
+        </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
+  scrollContainer: {
+    flexGrow: 1, 
     justifyContent: 'center',
+  },
+  innerContainer: { 
+    padding: 24,
     backgroundColor: '#f5f7fa',
   },
   logo: {
-    width: 120,
-    height: 120,
+    width: 100, 
+    height: 100,
     resizeMode: 'contain',
     alignSelf: 'center',
-    marginBottom: 20,
-    marginTop: -20,
+    marginBottom: 15, 
   },
   title: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 8,
@@ -155,26 +191,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 25,
   },
   input: {
     backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 16,
-    fontSize: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10, 
+    marginBottom: 14, 
+    fontSize: 15, 
     borderWidth: 1,
     borderColor: '#ddd',
   },
   button: {
     backgroundColor: '#1976d2',
     paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 8,
+    borderRadius: 10,
+    marginTop: 10, 
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 2,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 48,
+  },
+  buttonDisabled: {
+    backgroundColor: '#a0c3e2',
   },
   buttonText: {
     color: '#fff',
@@ -185,7 +229,7 @@ const styles = StyleSheet.create({
   loginContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 30,
+    marginTop: 25, 
   },
   loginText: {
     color: '#555',

@@ -14,7 +14,7 @@ export default function MainStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Tabs" component={TabNavigator} />
       <Stack.Screen name="BookDetailsScreen" component={BookDetailsScreen} />
-      <Stack.Screen name="Borrow" component={BorrowScreen} />
+      <Stack.Screen name="BorrowScreen" component={BorrowScreen} />
       <Stack.Screen name="YourBooksScreen" component={YourBooksScreen} />
       <Stack.Screen name="About" component={AboutScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
