@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_PORT = 8000;
 
-const PRODUCTION_URL = 'http://192.168.197.211:8000/api/';  
+const PRODUCTION_URL = 'http://192.168.137.76:8000/api/';  
 
 // const API_BASE_URL = 'http://10.0.2.2:8000/api/';
 
@@ -18,7 +18,7 @@ const getBaseUrl = () => {
 
     // Construct the base URL using the detected hostname and your API's port
     // Ensure you use http or https based on your local server setup
-    console.log("return `http://${hostname}:${API_PORT}`;");
+    console.log(hostname, API_PORT);
     return `http://${hostname}:${API_PORT}`;
   } else {
     // Fallback for production builds or environments where debuggerHost is not available
