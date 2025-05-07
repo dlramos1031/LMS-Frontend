@@ -10,19 +10,24 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthContext } from '../navigation/AuthProvider'; 
 import apiClient from '../services/apiClient'; 
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 const DEFAULT_COVER = 'https://via.placeholder.com/300/CCCCCC/FFFFFF?text=No+Cover';
+
+const formatDate = (dateString) => {
+  if (!dateString) return 'N/A';
+  const options = { year: 'numeric', month: 'long', day: 'numeric' };
+  return new Date(dateString).toLocaleDateString(undefined, options);
+};
 
 export default function BookDetailsScreen() {
   const route = useRoute();
   const navigation = useNavigation();
-  const insets = useSafeAreaInsets();
   const { token } = useContext(AuthContext);
   const { book: initialBookData } = route.params;
+
   const [book, setBook] = useState(initialBookData);
   const [isFavorite, setIsFavorite] = useState(initialBookData?.is_favorite || false);
   const [borrowingStatus, setBorrowingStatus] = useState(null); 
@@ -31,42 +36,51 @@ export default function BookDetailsScreen() {
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
-  const fetchBorrowingStatus = useCallback(async () => {
-    if (!token || !book?.id) {
-        setBorrowingStatus('none');
-        setBorrowingId(null);
-        setIsLoadingStatus(false);
-        return;
+  const fetchBookDetailsAndStatus = useCallback(async () => {
+    if (!book?.id) {
+      setIsLoadingStatus(false);
+      return;
     }
     setIsLoadingStatus(true);
     try {
-        const response = await apiClient.get('/borrow/', { params: { book_id: book.id } });
-        const borrowings = response.data?.results || response.data || [];
+      const bookResponse = await apiClient.get(`/books/${book.id}/`);
+      const fetchedBook = bookResponse.data;
+      setBook(fetchedBook);
+      setIsFavorite(fetchedBook?.is_favorite || false);
 
-        const activeOrPendingBorrow = borrowings.find(b => b.book.id === book.id && (b.status === 'approved' || b.status === 'pending') && b.is_active);
-
-        if (activeOrPendingBorrow) {
-            setBorrowingStatus(activeOrPendingBorrow.status); 
-            setBorrowingId(activeOrPendingBorrow.id);
+      if (token) {
+        const borrowResponse = await apiClient.get('/borrow/');
+        const borrowings = borrowResponse.data?.results || borrowResponse.data || [];
+        const relevantBorrowing = borrowings.find(
+          b => b.book.id === fetchedBook.id && (b.status === 'approved' || b.status === 'pending')
+        );
+        if (relevantBorrowing) {
+          setBorrowingStatus(relevantBorrowing.status);
+          setBorrowingId(relevantBorrowing.id);
         } else {
-            setBorrowingStatus('none'); 
-            setBorrowingId(null);
+          setBorrowingStatus('none');
+          setBorrowingId(null);
         }
-    } catch (error) {
-        console.error("Failed to fetch borrowing status:", error.response || error);
-        setBorrowingStatus('error'); 
+      } else {
+        setBorrowingStatus('none');
         setBorrowingId(null);
+      }
+    } catch (error) {
+      console.error("Failed to fetch book details or status:", error.response?.data || error);
+      Alert.alert("Error", "Could not load book details. Please try again.");
+      setBorrowingStatus('error');
     } finally {
-        setIsLoadingStatus(false);
+      setIsLoadingStatus(false);
     }
-  }, [token, book?.id]);
+  }, [book?.id, token]);
 
   useFocusEffect(
     useCallback(() => {
-        setBook(initialBookData); 
-        setIsFavorite(initialBookData?.is_favorite || false);
-        fetchBorrowingStatus(); 
-    }, [initialBookData, fetchBorrowingStatus])
+      if (initialBookData?.id) {
+          setBook(prevBook => ({ ...prevBook, ...initialBookData }));
+          fetchBookDetailsAndStatus();
+      }
+    }, [initialBookData, fetchBookDetailsAndStatus])
   );
 
   const handleFavoriteToggle = async () => {
@@ -134,7 +148,6 @@ export default function BookDetailsScreen() {
    navigation.navigate('BorrowScreen', { book });
  };
 
-  // Defensive check if book data is somehow missing
   if (!book) {
     return (
       <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
@@ -146,86 +159,81 @@ export default function BookDetailsScreen() {
   const authorName = book.authors?.length > 0 ? book.authors.map(a => a.name).join(', ') : 'Unknown Author';
   const genreNames = book.genres?.length > 0 ? book.genres.map(g => g.name).join(', ') : 'N/A';
   const coverImageUrl = book.cover_image || DEFAULT_COVER;
-  const quantityLabel = book.quantity > 1 ? `${book.quantity} copies available` : book.quantity === 1 ? '1 copy available' : 'Out of stock';
+  const quantityLabel = book.quantity > 1 ? `${book.quantity} copies` : book.quantity === 1 ? '1 copy' : 'Out of stock';
   const borrowActionDisabled = !book.is_available || book.quantity <= 0 || borrowingStatus === 'approved' || borrowingStatus === 'pending';
 
-  return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Image source={{ uri: coverImageUrl }} style={styles.cover} />
-
-        <View style={styles.headerRow}>
-            <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={styles.title}>{book.title || 'No Title'}</Text>
-                <Text style={styles.author}>by {authorName}</Text>
-            </View>
-            {/* Favorite Button */}
-            <TouchableOpacity onPress={handleFavoriteToggle} disabled={isTogglingFavorite} style={styles.iconButton}>
-                {isTogglingFavorite ? (
-                    <ActivityIndicator size="small" color="#e53e3e" />
-                ) : (
-                    <Ionicons
-                    name={isFavorite ? 'heart' : 'heart-outline'}
-                    size={32} 
-                    color={isFavorite ? '#e53e3e' : '#A0AEC0'} 
-                    />
-                )}
-            </TouchableOpacity>
-        </View>
-
-        <View style={styles.detailSection}>
-            <Text style={styles.label}>Genre:</Text>
-            <Text style={styles.value}>{genreNames}</Text>
-
-            <Text style={styles.label}>Availability:</Text>
-            <Text style={[styles.value, { color: book.is_available ? '#2F855A' : '#C53030', fontWeight: 'bold' }]}>
-                {book.is_available ? 'Available to Borrow' : 'Currently Unavailable'}
-            </Text>
-
-            <Text style={styles.label}>Copies Available:</Text>
-            <Text style={styles.value}>{quantityLabel}</Text>
-
-            <Text style={styles.label}>Summary:</Text>
-            <Text style={styles.summary}>{book.summary || 'No summary provided for this book.'}</Text>
-        </View>
-
-        {/* --- Conditional Action Button Section --- */}
-        <View style={styles.actionButtonContainer}>
-             {isLoadingStatus ? (
-                 <ActivityIndicator size="small" color="#4a5568" />
-             ) : borrowingStatus === 'pending' ? (
-                 // Show Cancel Button (appears during pending request)
-                 <TouchableOpacity
-                     style={[styles.cancelButton, isCancelling && styles.buttonDisabled]}
-                     onPress={cancelBorrow}
-                     disabled={isCancelling}
-                 >
-                      {isCancelling ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                          <Text style={styles.cancelButtonText}>Cancel Borrow Request</Text>
-                      )}
-                 </TouchableOpacity>
-             ) : borrowingStatus === 'approved' ? (
-                 // Show Disabled "Currently Borrowing" Button
-                 <TouchableOpacity style={[styles.button, styles.buttonDisabled]} disabled={true}>
-                     <Text style={styles.buttonText}>Currently Borrowing</Text>
-                 </TouchableOpacity>
-             ) : (
-                 // Show "Borrow This Book" Button (enabled/disabled based on availability)
-                 <TouchableOpacity
-                     style={[styles.button, borrowActionDisabled && styles.buttonDisabled]}
-                     onPress={handleBorrow}
-                     disabled={borrowActionDisabled}
-                 >
-                     <Text style={styles.buttonText}>
-                         {(!book.is_available || book.quantity <= 0) ? 'Unavailable to Borrow' : 'Borrow This Book'}
-                     </Text>
-                 </TouchableOpacity>
-             )}
-        </View>
-        </ScrollView>
+  const DetailItem = ({ label, value, iconName }) => (
+    <View style={styles.detailItemContainer}>
+      {iconName && <MaterialCommunityIcons name={iconName} size={20} color="#4A5568" style={styles.detailIcon} />}
+      <Text style={styles.label}>{label}:</Text>
+      <Text style={styles.value}>{value || 'N/A'}</Text>
     </View>
+  );
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <Image source={{ uri: coverImageUrl }} style={styles.coverImage} />
+
+      <View style={styles.mainInfoContainer}>
+        <View style={styles.titleAuthorSection}>
+            <Text style={styles.title}>{book.title || 'No Title'}</Text>
+            <Text style={styles.author}>by {authorName}</Text>
+        </View>
+        <TouchableOpacity onPress={handleFavoriteToggle} disabled={isTogglingFavorite} style={styles.favoriteButton}>
+            {isTogglingFavorite ? (
+                <ActivityIndicator size="small" color="#e53e3e" />
+            ) : (
+                <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={30} color={isFavorite ? '#e53e3e' : '#A0AEC0'} />
+            )}
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Book Details</Text>
+        <DetailItem label="Genre" value={genreNames} iconName="tag-multiple-outline" />
+        <DetailItem label="Availability" value={book.is_available ? 'Available' : 'Unavailable'} iconName="check-circle-outline" />
+        <DetailItem label="Copies" value={quantityLabel} iconName="book-multiple-outline" />
+        {book.publisher && <DetailItem label="Publisher" value={book.publisher} iconName="domain" />}
+        {book.publish_date && <DetailItem label="Published" value={formatDate(book  .publish_date)} iconName="calendar-month-outline" />}
+        {book.language && <DetailItem label="Language" value={book.language} iconName="translate" />}
+        {book.page_count && <DetailItem label="Pages" value={book.page_count.toString()} iconName="book-open-page-variant-outline" />}
+        {book.isbn_13 && <DetailItem label="ISBN-13" value={book.isbn_13} iconName="barcode-scan" />}
+        {book.isbn_10 && <DetailItem label="ISBN-10" value={book.isbn_10} iconName="barcode" />}
+        {book.open_library_id && <DetailItem label="OpenLibrary ID" value={book.open_library_id} iconName="library-outline" />}
+        <DetailItem label="Total Borrows" value={(book.total_borrows || 0).toString()} iconName="chart-line-variant" />
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Summary</Text>
+        <Text style={styles.summary}>{book.summary || 'No summary provided.'}</Text>
+      </View>
+
+      <View style={styles.actionButtonContainer}>
+        {isLoadingStatus ? (
+          <ActivityIndicator size="large" color="#4A90E2" style={{ marginVertical: 20 }} />
+        ) : borrowingStatus === 'pending' ? (
+          <TouchableOpacity
+            style={[styles.buttonBase, styles.cancelButton, isCancelling && styles.buttonDisabled]}
+            onPress={cancelBorrow}
+            disabled={isCancelling}>
+            {isCancelling ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Cancel Borrow Request</Text>}
+          </TouchableOpacity>
+        ) : borrowingStatus === 'approved' ? (
+          <TouchableOpacity style={[styles.buttonBase, styles.buttonDisabled]} disabled={true}>
+            <Text style={styles.buttonText}>Currently Borrowing</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.buttonBase, styles.borrowButton, borrowActionDisabled && styles.buttonDisabled]}
+            onPress={handleBorrow}
+            disabled={borrowActionDisabled}>
+            <Text style={styles.buttonText}>
+              {!book.is_available || book.quantity <= 0 ? 'Unavailable' : 'Borrow This Book'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </ScrollView>
   );
 }
 
@@ -234,100 +242,107 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
+  scrollContent: {
+    paddingBottom: 30, // Space at the bottom
+  },
   centered: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  scrollContainer: {
-      padding: 20, 
-      paddingBottom: 40, 
-  },
-  cover: {
+  coverImage: {
     width: '100%',
-    height: 300, 
-    resizeMode: 'cover',
-    borderRadius: 12,
-    marginBottom: 25, 
+    height: 320, // Increased height
+    resizeMode: 'cover', // Or 'contain' if you prefer
     backgroundColor: '#e2e8f0',
   },
-  headerRow: {
+  mainInfoContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between', 
-    alignItems: 'flex-start', 
-    marginBottom: 20,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start', // Align items to the top
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: '#fff', // White background for this section
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
   },
-  iconButton: {
-      paddingLeft: 10, 
+  titleAuthorSection: {
+    flex: 1, // Take available space
+    marginRight: 10,
   },
   title: {
-    fontSize: 24, 
+    fontSize: 22, // Slightly larger title
     fontWeight: 'bold',
-    color: '#1a202c', 
-    marginBottom: 2,
+    color: '#1e293b',
+    marginBottom: 4,
   },
   author: {
     fontSize: 16,
-    color: '#4a5568', 
-    lineHeight: 22,
+    color: '#475569',
   },
-  detailSection: {
-      marginBottom: 25, 
-      borderTopWidth: 1,
-      borderTopColor: '#e2e8f0',
-      paddingTop: 15,
+  favoriteButton: {
+    padding: 8, // Make it easier to tap
+  },
+  section: {
+    marginTop: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: '#fff', // White background for sections
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#334155',
+    marginBottom: 12,
+  },
+  detailItemContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start', // Align icon with the start of the text
+    marginBottom: 10,
+  },
+  detailIcon: {
+    marginRight: 10,
+    marginTop: 2, // Align icon nicely with text
   },
   label: {
-    fontWeight: '600', 
-    marginTop: 14,
-    marginBottom: 4,
-    color: '#4a5568', 
+    fontWeight: '500',
+    color: '#475569',
     fontSize: 15,
+    marginRight: 6,
   },
   value: {
-    marginBottom: 8,
-    color: '#2d3748', 
-    fontSize: 16,
-    lineHeight: 22,
+    color: '#1e293b',
+    fontSize: 15,
+    flexShrink: 1, // Allow value text to wrap if long
   },
   summary: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#4a5568', 
-    marginTop: 4,
+    color: '#334155',
   },
-  button: {
-    backgroundColor: '#3b82f6',
+  actionButtonContainer: {
+    paddingHorizontal: 20,
+    marginTop: 20,
+  },
+  buttonBase: {
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: 10,
-    flexDirection: 'row',
     justifyContent: 'center',
+    flexDirection: 'row',
     minHeight: 48,
   },
-  buttonDisabled: {
-    backgroundColor: '#a0aec0', 
-    opacity: 0.7,
-  },
-  actionButtonContainer: { 
-      marginTop: 20,
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 16,
+  borrowButton: {
+    backgroundColor: '#3b82f6', // Blue
   },
   cancelButton: {
-    backgroundColor: '#E53E3E', 
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 10,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    minHeight: 48,
+    backgroundColor: '#ef4444', // Red
   },
-  cancelButtonText: {
+  buttonDisabled: {
+    backgroundColor: '#cbd5e1', // Grey
+  },
+  buttonText: {
     color: '#fff',
     fontWeight: '600',
     fontSize: 16,

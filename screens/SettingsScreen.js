@@ -42,13 +42,6 @@ export default function SettingsScreen({ navigation }) {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#f1f5f9" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
-      </View>
-
       <View style={styles.section}>
         <View style={styles.option}>
           <Ionicons name="notifications-outline" size={22} color="#334155" />
