@@ -5,18 +5,11 @@ import { Ionicons } from '@expo/vector-icons';
 export default function AboutScreen({ navigation }) {
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#f1f5f9" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>About</Text>
-      </View>
-
       <View style={styles.card}>
-        <Text style={styles.title}>LibraryMate</Text>
-        <Text style={styles.version}>Version 1.0.0</Text>
+        <Text style={styles.title}>Author's Lib</Text>
+        <Text style={styles.version}>Version 1.3.0</Text>
         <Text style={styles.description}>
-          LibraryMate is a modern library management system that helps students and institutions
+          Author's Lib is a modern library management system that helps students and institutions
           easily browse, borrow, and return books with powerful tracking features.
         </Text>
       </View>

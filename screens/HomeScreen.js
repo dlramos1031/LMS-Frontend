@@ -138,7 +138,7 @@ export default function HomeScreen() {
             {/* Genre Sections */}
             <GenreSection icon="book-open-page-variant" label="Comics" query="comics" onBookPress={handleBookPress} />
             <GenreSection icon="feather" label="Fiction" query="fiction" onBookPress={handleBookPress} />
-            <GenreSection icon="magnify" label="Mystery" query="mystery" onBookPress={handleBookPress} />
+            <GenreSection icon="book" label="Education" query="education" onBookPress={handleBookPress} />
           </>
         )}
       </ScrollView>

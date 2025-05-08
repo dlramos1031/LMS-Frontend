@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_PORT = 8000;
 
-const PRODUCTION_URL = 'http://192.168.137.76:8000/api/';  
+const PRODUCTION_URL = 'http://10.0.2.2:8000/api/';  
 
 // const API_BASE_URL = 'http://10.0.2.2:8000/api/';
 
