@@ -38,7 +38,7 @@ export default function ProfileScreen({ navigation }) {
     setError(null);
     try {
       console.log("Fetching profile from /api/profile/");
-      const response = await apiClient.get('/auth/profile/'); // Use the correct API endpoint
+      const response = await apiClient.get('api/auth/profile/'); // Use the correct API endpoint
       if (response.data) {
         setProfile(response.data); // Update state with data from API
         console.log("Profile data fetched:", response.data);
@@ -82,7 +82,7 @@ export default function ProfileScreen({ navigation }) {
 
     try {
       console.log("Updating profile to /api/profile/ with data:", dataToSave);
-      const response = await apiClient.patch('/auth/profile/', dataToSave);
+      const response = await apiClient.patch('/api/auth/profile/', dataToSave);
       setProfile(response.data);
       Alert.alert('Success', 'Profile updated successfully');
       console.log("Profile update successful:", response.data);

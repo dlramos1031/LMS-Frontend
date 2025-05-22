@@ -23,7 +23,7 @@ export default function ForgotPasswordScreen({ navigation }) {
     setIsSubmitting(true);
     try {
       // Call the Django backend endpoint provided by django-rest-passwordreset
-      const response = await apiClient.post('/auth/password_reset/', { email });
+      const response = await apiClient.post('/api/auth/password_reset/', { email });
 
       // Check for successful response (django-rest-passwordreset usually returns 200 OK)
       if (response.status === 200) {

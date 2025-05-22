@@ -37,7 +37,7 @@ export default function NotificationsScreen() {
     setError(null);
     try {
       console.log("Fetching notifications from /api/notifications/");
-      const response = await apiClient.get('/notifications/'); // GET request to list notifications
+      const response = await apiClient.get('/api/notifications/'); // GET request to list notifications
       setNotifications(response.data?.results || response.data || []); // Handle pagination if present
       console.log(`Fetched ${response.data?.results?.length || response.data?.length || 0} notifications`);
     } catch (err) {
@@ -76,7 +76,7 @@ export default function NotificationsScreen() {
     try {
         console.log(`Attempting POST to /notifications/${id}/mark_read/`);
       // Call the backend API endpoint
-      await apiClient.post(`/notifications/${id}/mark_read/`);
+      await apiClient.post(`/api/notifications/${id}/mark_read/`);
       // No need to refetch if optimistic update is sufficient,
       // but you could refetch here if needed: fetchNotifications();
     } catch (error) {
@@ -102,7 +102,7 @@ export default function NotificationsScreen() {
 
           try {
             console.log("Attempting DELETE to /notifications/clear_all/");
-            await apiClient.delete('/notifications/clear_all/');
+            await apiClient.delete('/api/notifications/clear_all/');
              // fetchNotifications(); // Or just confirm empty state
              console.log("Notifications cleared successfully");
           } catch (err) {

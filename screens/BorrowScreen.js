@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Platform,
   Alert, ActivityIndicator, ScrollView
@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import apiClient from '../services/apiClient';
 import { AuthContext } from '../navigation/AuthProvider';
 import { Ionicons } from '@expo/vector-icons'; 
+import { Picker } from '@react-native-picker/picker';
 
 // Helper function to format date to YYYY-MM-DD
 const formatDate = (date) => {
@@ -24,15 +25,38 @@ export default function BorrowScreen() {
   const route = useRoute();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { token } = useContext(AuthContext); 
-  const { book } = route.params; 
+  const { token, user } = useContext(AuthContext);
+  const passedBookDetails = route.params?.book; 
 
   const initialDueDate = new Date();
   initialDueDate.setDate(initialDueDate.getDate() + 7);
 
-  const [dueDate, setDueDate] = useState(initialDueDate); 
+  const [dueDate, setDueDate] = useState(initialDueDate);
   const [showPicker, setShowPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [bookToBorrow, setBookToBorrow] = useState(passedBookDetails);
+
+  const [availableCopies, setAvailableCopies] = useState([]);
+  const [selectedCopyId, setSelectedCopyId] = useState("");
+  const [isLoadingCopies, setIsLoadingCopies] = useState(false);
+
+  useEffect(() => {
+    if (bookToBorrow?.isbn) {
+      setIsLoadingCopies(true);
+      apiClient.get(`/api/books/${bookToBorrow.isbn}/available-copies/`)
+        .then(response => {
+          setAvailableCopies(response.data || []);
+        })
+        .catch(error => {
+          console.error("Failed to fetch available copies:", error);
+          Alert.alert("Error", "Could not load available copies for this book.");
+          setAvailableCopies([]);
+        })
+        .finally(() => {
+          setIsLoadingCopies(false);
+        });
+    }
+  }, [bookToBorrow?.isbn]);
 
   const onChangeDate = (event, selectedDate) => {
     const currentDate = selectedDate || dueDate; 
@@ -41,7 +65,6 @@ export default function BorrowScreen() {
     const today = new Date();
     today.setHours(0, 0, 0, 0); 
 
-    // Prevent selecting past dates
     if (currentDate < today) {
       Alert.alert("Invalid Date", "Due date cannot be in the past.");
       const tomorrow = new Date(today);
@@ -57,29 +80,36 @@ export default function BorrowScreen() {
       Alert.alert("Login Required", "Please log in to borrow books.");
       return;
     }
-    if (!book || !book.id) {
-      Alert.alert("Error", "Book information is missing.");
+    if (!bookToBorrow || !bookToBorrow.isbn) { 
+      Alert.alert("Error", "Book information is missing. Cannot process request.");
       return;
     }
 
     setIsSubmitting(true);
     const formattedDueDate = formatDate(dueDate);
 
+    let payload = {
+      due_date: formattedDueDate,
+    };
+
+    if (selectedCopyId && selectedCopyId !== "automatic") {
+      payload.book_copy_id = parseInt(selectedCopyId, 10);
+    } else {
+      payload.book_isbn_for_request = bookToBorrow.isbn;
+    }
+
     try {
-      console.log(`Attempting borrow request for book ID: ${book.id} with due date: ${formattedDueDate}`);
-      await apiClient.post('/borrow/request-borrow/', {
-        book_id: book.id, 
-        due_date: formattedDueDate,
-      });
+      console.log('Submitting borrow request with payload:', payload);
+      await apiClient.post('/api/borrowings/', payload);
 
       Alert.alert(
         'Borrow Request Submitted',
-        `Your request to borrow "${book.title}" with a due date of ${formattedDueDate} has been submitted. Please wait for librarian approval.`
+        `Your request to borrow "${bookToBorrow.title}" with a due date of ${formattedDueDate} has been submitted. Please wait for librarian approval.`
       );
-      navigation.navigate('Tabs', { screen: 'YourBooksScreen' }); 
+      navigation.navigate('Tabs', { screen: 'YourBooksScreen' });
 
     } catch (error) {
-      console.error("Borrow request failed:", error.response?.data || error.message);
+      console.error("Borrow request failed:", error.response?.data || error.message, error.config);
       let errorMessage = 'Could not submit borrow request.';
       if (error.response?.data) {
          const errors = error.response.data;
@@ -98,19 +128,47 @@ export default function BorrowScreen() {
     }
   };
 
+  if (!bookToBorrow) {
+    return (
+        <View style={styles.container}>
+            <Text>Loading book details...</Text>
+        </View>
+    );
+  } 
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
         <ScrollView contentContainerStyle={styles.scrollContainer}>
-            {/* Header */}
             <Text style={styles.headerTitle}>Request to Borrow</Text>
-
-            {/* Book Info Display */}
             <View style={styles.bookInfo}>
                 <Text style={styles.titleLabel}>Book Title:</Text>
-                <Text style={styles.title}>{book?.title || 'N/A'}</Text>
-                {/* Add other book details if desired */}
+                <Text style={styles.title}>{bookToBorrow?.title || 'N/A'}</Text>
+                <Text style={styles.titleLabel}>ISBN:</Text>
+                <Text style={styles.title}>{bookToBorrow?.isbn || 'N/A'}</Text>
             </View>
 
+            <Text style={styles.label}>Select Specific Copy (Optional):</Text>
+            {isLoadingCopies ? (
+              <ActivityIndicator />
+            ) : availableCopies.length > 0 ? (
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={selectedCopyId}
+                  onValueChange={(itemValue) => setSelectedCopyId(itemValue)}
+                  style={styles.picker}
+                  prompt="Choose a copy"
+                >
+                  <Picker.Item label="Assign automatically (earliest available)" value="automatic" />
+                  {availableCopies.map((copy) => (
+                    // Assuming your available-copies endpoint returns 'id' (PK) and 'copy_id' (library barcode)
+                    <Picker.Item key={copy.id} label={`Copy ID: ${copy.copy_id}`} value={String(copy.id)} />
+                  ))}
+                </Picker>
+              </View>
+            ) : (
+              <Text style={styles.infoText}>No specific copies found, one will be assigned if available.</Text>
+            )}
+            
             {/* Date Selection Label */}
             <Text style={styles.label}>Select Due Date:</Text>
 
@@ -245,5 +303,21 @@ const styles = StyleSheet.create({
     color: '#4a5568',
     fontWeight: '500',
     fontSize: 16,
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    marginBottom: 20,
+    backgroundColor: '#fff',
+  },
+  picker: {
+    height: Platform.OS === 'ios' ? 180 : 50,
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#718096',
+    marginVertical: 10,
+    textAlign: 'center',
   },
 });

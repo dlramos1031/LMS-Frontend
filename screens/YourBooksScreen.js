@@ -32,25 +32,29 @@ export default function YourBooksScreen() {
     setError(null); 
 
     try {
-      console.log("Fetching borrowed books from API endpoint: /borrow/");
-      const response = await apiClient.get('/borrow/'); 
+      const response = await apiClient.get('/api/borrowings/'); 
       const allBorrowed = response.data || [];
       const currentBorrowed = [];
       const pastBorrowed = [];
 
+      const currentStatuses = ['REQUESTED', 'ACTIVE', 'OVERDUE']; 
+      const mapToBackendStatus = (frontendStatus) => {
+        if (frontendStatus === 'pending') return 'REQUESTED';
+        if (frontendStatus === 'approved') return 'ACTIVE'; 
+        return frontendStatus; 
+      };
+
       allBorrowed.forEach((item) => {
-        console.log("Book:", item.book.title, ", Status:", item.status, ", Return Date:", item.actual_return_date);
-        if ((item.status === 'pending' || item.status === 'approved') && item.actual_return_date === null) {
+        const backendStatus = item.status;
+        if (currentStatuses.includes(backendStatus)) {
             currentBorrowed.push(item);
-        }
-        else {
+        } else {
             pastBorrowed.push(item);
         }
       });
 
       setCurrent(currentBorrowed);
       setHistory(pastBorrowed);
-      console.log("Fetched current:", currentBorrowed.length, "Fetched history:", pastBorrowed.length);
 
     } catch (err) {
       console.error('Error fetching borrowed books:', err.response?.data || err.message);
@@ -64,7 +68,6 @@ export default function YourBooksScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      console.log("YourBooksScreen focused, fetching data...");
       fetchBorrowedBooks();
     }, [fetchBorrowedBooks]) 
   );
@@ -84,8 +87,7 @@ export default function YourBooksScreen() {
                     setCancellingBookId(borrowingId);
                     setError(null);
                     try {
-                        console.log(`Attempting DELETE to /borrow/${borrowingId}/cancel-request/`);
-                        await apiClient.delete(`/borrow/${borrowingId}/cancel-request/`);
+                        await apiClient.delete(`/api/borrow/${borrowingId}/cancel-request/`);
                         Alert.alert('Success', 'Borrow request cancelled successfully.');
                         fetchBorrowedBooks(); 
                     } catch (error) {
@@ -106,8 +108,7 @@ export default function YourBooksScreen() {
   };
 
   const renderBookItem = ({ item }) => {
-    const book = item.book;
-    const bookData = book;
+    const bookData = item.book_copy?.book;
     const coverImageUrl = bookData?.cover_image || DEFAULT_COVER;
 
     const formattedBorrowDate = item.borrow_date ? new Date(item.borrow_date).toLocaleDateString() : 'N/A';
@@ -120,7 +121,7 @@ export default function YourBooksScreen() {
     return (
         <TouchableOpacity
             style={styles.card}
-            onPress={() => navigation.navigate('BookDetailsScreen', { book })}
+            onPress={() => navigation.navigate('BookDetailsScreen', { book: bookData })}
             
         >
             <Image source={{ uri: coverImageUrl }} style={styles.cover} onError={(e) => console.log("Failed to load image:", e.nativeEvent.error)} />
