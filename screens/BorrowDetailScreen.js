@@ -107,7 +107,7 @@ const BorrowDetailScreen = () => {
         <DetailRow label="Requested On" value={formatDate(request_date, true)} />
         {issue_date && <DetailRow label="Issued On" value={formatDate(issue_date, true)} />}
         <DetailRow label="Due Date" value={formatDate(due_date)} />
-        {return_date && <DetailRow label="Returned On" value={formatDate(return_date, true)} />}
+        {return_date && <DetailRow label={status === 'LOST_BY_BORROWER' ? 'Lost On' : 'Returned On'} value={formatDate(return_date, true)} />}
       </View>
 
       <View style={styles.section}>
