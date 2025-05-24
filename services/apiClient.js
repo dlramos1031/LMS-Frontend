@@ -6,22 +6,15 @@ const API_PORT = 8000;
 
 const PRODUCTION_URL = 'https://dlramos1031.pythonanywhere.com/';
 const EXPO_GO_URL = 'http://10.0.2.2:8000/';
+const DEV_URL = 'http://192.168.1.246:8000/';
 
 
 const getBaseUrl = () => {
   // Check if running in Expo Go or a development build with a debugger connection
   const isStandalone = Constants.executionEnvironment === 'standalone';
   const isBare = Constants.executionEnvironment === 'bare';
-
-  if (!isStandalone && !isBare) {
-    // Code to execute if running in Expo Go
-    console.log('Running in Expo Go');
-    return EXPO_GO_URL;
-  } else {
-    // Code to execute if not running in Expo Go
-    console.log('Not running in Expo Go');
-    return PRODUCTION_URL;
-  }
+  console.log(Constants.executionEnvironment);
+  return DEV_URL;
 };
 
 const baseURL = getBaseUrl();
