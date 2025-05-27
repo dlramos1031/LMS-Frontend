@@ -6,7 +6,7 @@ const API_PORT = 8000;
 
 const PRODUCTION_URL = 'https://dlramos1031.pythonanywhere.com/';
 const EXPO_GO_URL = 'http://10.0.2.2:8000/';
-const DEV_URL = 'http://192.168.1.246:8000/';
+const DEV_URL = 'http://192.168.137.1:8000/';
 
 
 const getBaseUrl = () => {
@@ -14,7 +14,7 @@ const getBaseUrl = () => {
   const isStandalone = Constants.executionEnvironment === 'standalone';
   const isBare = Constants.executionEnvironment === 'bare';
   console.log(Constants.executionEnvironment);
-  return DEV_URL;
+  return EXPO_GO_URL;
 };
 
 const baseURL = getBaseUrl();
