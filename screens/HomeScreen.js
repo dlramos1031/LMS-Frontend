@@ -32,7 +32,7 @@ export default function HomeScreen() {
       return;
     }
     try {
-      const response = await apiClient.get('/books/', { params: { is_favorite: true, limit: 1 } });
+      const response = await apiClient.get('/api/books/', { params: { is_favorite: true, limit: 3 } });
       setHasFavorites(response.data.results?.length > 0 || response.data?.length > 0);
     } catch (error) {
       console.error('Failed to check for favorites:', error);

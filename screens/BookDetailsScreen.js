@@ -1,5 +1,4 @@
-// LMS/Frontend/screens/BookDetailsScreen.js
-import React, { useState, useContext, useCallback } from 'react';
+import React, { useState, useContext, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,413 +9,432 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { AuthContext } from '../navigation/AuthProvider';
 import apiClient from '../services/apiClient';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import ExpandableText from '../components/ExpandableText'; // Import the new component
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import ExpandableText from '../components/ExpandableText';
 
 const DEFAULT_COVER = 'https://via.placeholder.com/300/CCCCCC/FFFFFF?text=No+Cover';
 
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
-  const options = { year: 'numeric', month: 'long', day: 'numeric' };
-  return new Date(dateString).toLocaleDateString(undefined, options);
+  try {
+    const options = { year: 'numeric', month: 'long', day: 'numeric' };
+    return new Date(dateString).toLocaleDateString(undefined, options);
+  } catch (e) {
+    return dateString;
+  }
 };
 
-const DetailItem = ({ label, value, iconName }) => (
-  <View style={styles.detailItemContainer}>
-    {iconName && <MaterialCommunityIcons name={iconName} size={20} color="#4A5568" style={styles.detailIcon} />}
-    <Text style={styles.label}>{label}:</Text>
-    <Text style={styles.value}>{value || 'N/A'}</Text>
-  </View>
-);
+const DetailItem = ({ label, value, iconName, isExpandable = false }) => {
+  let displayValue = value;
+  if (value === null || typeof value === 'undefined' || value === '') {
+    displayValue = 'N/A';
+  } else if (Array.isArray(value)) {
+    displayValue = value.length > 0 ? value.join(', ') : 'N/A';
+  } else if (typeof value === 'number') {
+    displayValue = value.toString();
+  }
+
+
+  return (
+    <View style={styles.detailItemContainer}>
+      {iconName && <MaterialCommunityIcons name={iconName} size={20} color="#4A5568" style={styles.detailIcon} />}
+      <Text style={styles.label}>{label}:</Text>
+      {isExpandable && typeof displayValue === 'string' && displayValue !== 'N/A' ? (
+        <ExpandableText text={displayValue} style={styles.value} />
+      ) : (
+        <Text style={styles.value}>{displayValue}</Text>
+      )}
+    </View>
+  );
+};
 
 export default function BookDetailsScreen() {
   const route = useRoute();
   const navigation = useNavigation();
-  const { token } = useContext(AuthContext);
-  const { book: initialBookData } = route.params;
+  const { user } = useContext(AuthContext);
+  const initialBookData = route.params?.book;
+  const [bookDetails, setBookDetails] = useState(initialBookData || null);
+  const [borrowingInfo, setBorrowingInfo] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isActionLoading, setIsActionLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const bookIsbn = initialBookData?.isbn;
 
-  const [book, setBook] = useState(initialBookData);
-  const [isFavorite, setIsFavorite] = useState(initialBookData?.is_favorite || false);
-  const [borrowingStatus, setBorrowingStatus] = useState(null);
-  const [borrowingId, setBorrowingId] = useState(null);
-  const [isLoadingStatus, setIsLoadingStatus] = useState(true);
-  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
-  const [isCancelling, setIsCancelling] = useState(false);
-
-  const [detailsExpanded, setDetailsExpanded] = useState(false);
-  const MAX_INITIAL_DETAILS = 5;
-
-  const fetchBookDetailsAndStatus = useCallback(async () => {
-    if (!book?.id) {
-      setIsLoadingStatus(false);
+  const fetchAllBookData = useCallback(async () => {
+    if (!bookIsbn) {
+      setError("Book ISBN not found.");
+      setIsLoading(false);
+      if (!initialBookData) navigation.goBack();
       return;
     }
-    setIsLoadingStatus(true);
+
+    setIsLoading(true);
+    setError(null);
+    setBorrowingInfo(null);
+
     try {
-      const bookResponse = await apiClient.get(`/books/${book.id}/`);
-      const fetchedBook = bookResponse.data;
-      setBook(fetchedBook);
-      setIsFavorite(fetchedBook?.is_favorite || false);
+      const detailsResponse = await apiClient.get(`/api/books/${bookIsbn}/`);
+      setBookDetails(detailsResponse.data);
 
-      if (token) {
-        const borrowResponse = await apiClient.get('/borrow/');
-        const borrowings = borrowResponse.data?.results || borrowResponse.data || [];
-        const relevantBorrowing = borrowings.find(
-          b => b.book.id === fetchedBook.id && (b.status === 'approved' || b.status === 'pending')
-        );
-        if (relevantBorrowing) {
-          setBorrowingStatus(relevantBorrowing.status);
-          setBorrowingId(relevantBorrowing.id);
+      if (user?.id) {
+        const borrowingStatusParams = {
+          book_copy__book__isbn: bookIsbn,
+          borrower: user.id,
+          status__in: 'REQUESTED,ACTIVE,OVERDUE',
+        };
+        const borrowingResponse = await apiClient.get('/api/borrowings/', { params: borrowingStatusParams });
+        if (borrowingResponse.data && Array.isArray(borrowingResponse.data) && borrowingResponse.data.length > 0) {
+          setBorrowingInfo(borrowingResponse.data[0]);
         } else {
-          setBorrowingStatus('none');
-          setBorrowingId(null);
+          setBorrowingInfo(null);
         }
-      } else {
-        setBorrowingStatus('none');
-        setBorrowingId(null);
       }
-    } catch (error) {
-      console.error("Failed to fetch book details or status:", error.response?.data || error);
-      Alert.alert("Error", "Could not load book details. Please try again.");
-      setBorrowingStatus('error');
+    } catch (err) {
+      console.error('BookDetailsScreen: Failed to fetch book data:', err.response?.data || err.message, err);
+      setError('Failed to load book details. Pull down to refresh.');
+      if (!bookDetails && initialBookData) {
+          setBookDetails(initialBookData);
+      }
     } finally {
-      setIsLoadingStatus(false);
+      setIsLoading(false);
     }
-  }, [book?.id, token]);
-
+  }, [bookIsbn, user?.id, initialBookData, navigation]);
+  
   useFocusEffect(
     useCallback(() => {
-      if (initialBookData?.id) {
-          setBook(prevBook => ({ ...prevBook, ...initialBookData }));
-          fetchBookDetailsAndStatus();
-      }
-    }, [initialBookData, fetchBookDetailsAndStatus])
+      fetchAllBookData();
+    }, [fetchAllBookData])
   );
-
-  const handleFavoriteToggle = async () => {
-    if (!token) {
-      Alert.alert("Login Required", "Please log in to add favorites.");
+  
+  const handleCancelRequest = async () => {
+    if (!borrowingInfo || borrowingInfo.status !== 'REQUESTED' || !borrowingInfo.id) {
+      Alert.alert("Invalid Action", "This borrowing request cannot be cancelled or its ID is missing.");
       return;
     }
-    if (!book || !book.id) return;
-    setIsTogglingFavorite(true);
-    const url = `/books/${book.id}/favorite/`;
+    setIsActionLoading(true);
     try {
-      if (isFavorite) {
-        await apiClient.delete(url);
-        setIsFavorite(false);
-        setBook(prev => ({ ...prev, is_favorite: false }));
-      } else {
-        await apiClient.post(url);
-        setIsFavorite(true);
-        setBook(prev => ({ ...prev, is_favorite: true }));
-      }
-       Alert.alert('Success', !isFavorite ? 'Added to favorites' : 'Removed from favorites');
-    } catch (error) {
-      console.error('Favorite toggle failed:', error.response?.data || error);
-      Alert.alert('Error', 'Could not update favorites. Please try again.');
+      await apiClient.post(`/api/borrowings/${borrowingInfo.id}/cancel-request/`);
+      Alert.alert("Success", "Your borrow request has been cancelled.");
+      fetchAllBookData(); 
+    } catch (err) {
+      console.error('Error cancelling request:', err.response?.data || err.message);
+      Alert.alert("Cancellation Failed", err.response?.data?.detail || "Could not cancel the request.");
     } finally {
-      setIsTogglingFavorite(false);
+      setIsActionLoading(false);
     }
   };
 
-  const cancelBorrow = async () => {
-    if (!borrowingId) {
-        Alert.alert("Error", "Cannot find borrowing record ID to cancel.");
-        return;
+  const navigateToBorrowScreen = () => {
+    if (!bookDetails || !bookDetails.isbn) {
+      Alert.alert("Error", "Book details are not fully loaded. Cannot proceed.");
+      return;
     }
-    Alert.alert(
-        "Cancel Request",
-        "Are you sure you want to cancel this borrow request?",
-        [
-            { text: "No", style: "cancel" },
-            {
-                text: "Yes",
-                onPress: async () => {
-                    setIsCancelling(true);
-                    try {
-                        await apiClient.delete(`/borrow/${borrowingId}/cancel-request/`);
-                        Alert.alert('Success', 'Borrow request cancelled.');
-                        fetchBookDetailsAndStatus();
-                    } catch (error) {
-                        console.error('Error cancelling borrow request:', error.response?.data || error);
-                        let errorMessage = 'Could not cancel request.';
-                        if (error.response?.data?.detail) errorMessage = error.response.data.detail;
-                        else if (error.response?.data?.error) errorMessage = error.response.data.error;
-                        Alert.alert('Cancellation Failed', errorMessage);
-                    } finally {
-                        setIsCancelling(false);
-                    }
-                },
-                style: "destructive"
-            }
-        ]
-    );
+    if (bookDetails.available_copies_count <= 0) {
+      Alert.alert("Not Available", "No copies of this book are currently available to request.");
+      return;
+    }
+    navigation.navigate('BorrowScreen', { 
+        book: bookDetails
+    });
   };
 
-  const handleBorrow = () => {
-    if (!token) {
-     Alert.alert("Login Required", "Please log in to borrow books.");
-     return;
-   }
-   if (!book || !book.is_available || book.quantity <= 0 || borrowingStatus === 'approved' || borrowingStatus === 'pending') {
-     Alert.alert('Cannot Borrow', 'Book is unavailable or already borrowed/requested.');
-     return;
-   }
-   navigation.navigate('BorrowScreen', { book });
- };
+  const renderActionButton = () => {
+    if (isLoading && !bookDetails) return null;
+    if (isActionLoading) {
+      return <ActivityIndicator size="small" color="#1976d2" style={styles.actionButtonActivity} />;
+    }
 
-  if (isLoadingStatus && !book?.title) {
+    const currentAvailableCopies = bookDetails?.available_copies_count || 0;
+
+    if (borrowingInfo) {
+      if (borrowingInfo.status === 'REQUESTED') {
+        return (
+          <TouchableOpacity style={[styles.actionButton, styles.cancelButton]} onPress={handleCancelRequest}>
+            <MaterialCommunityIcons name="cancel" size={20} color="#fff" style={styles.buttonIcon} />
+            <Text style={styles.actionButtonText}>Cancel Request</Text>
+          </TouchableOpacity>
+        );
+      } else if (['ACTIVE', 'OVERDUE'].includes(borrowingInfo.status)) {
+        return (
+          <View style={[styles.actionButton, styles.infoButtonDisabled]}>
+            <MaterialCommunityIcons name="book-clock" size={20} color="#fff" style={styles.buttonIcon} />
+            <Text style={styles.actionButtonText}>Loan Active (Due: {formatDate(borrowingInfo.due_date)})</Text>
+          </View>
+        );
+      }
+    } else if (currentAvailableCopies > 0) {
+      return (
+        <TouchableOpacity style={[styles.actionButton, styles.requestButton]} onPress={navigateToBorrowScreen}>
+          <MaterialCommunityIcons name="book-plus-outline" size={20} color="#fff" style={styles.buttonIcon} />
+          <Text style={styles.actionButtonText}>Request to Borrow</Text>
+        </TouchableOpacity>
+      );
+    } else if (currentAvailableCopies === 0) {
+      return (
+        <View style={[styles.actionButton, styles.infoButtonDisabled]}>
+           <MaterialCommunityIcons name="information-outline" size={20} color="#fff" style={styles.buttonIcon} />
+          <Text style={styles.actionButtonText}>No Copies Available</Text>
+        </View>
+      );
+    }
+    return null; 
+  };
+  
+  if (isLoading && !initialBookData) { 
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#1976d2"/>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#1976d2" />
       </View>
     );
   }
 
-  if (!book) {
+  if (error && !bookDetails) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <Text>Book data not found.</Text>
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity onPress={fetchAllBookData} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
+  
+  if (!bookDetails && !isLoading) {
+      return (
+          <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>Book data could not be loaded. Please go back and try again.</Text>
+          </View>
+      );
+  }
 
-  const authorName = book.authors?.length > 0 ? book.authors.map(a => a.name).join(', ') : 'Unknown Author';
-  const genreNames = book.genres?.length > 0 ? book.genres.map(g => g.name).join(', ') : 'N/A';
-  const coverImageUrl = book.cover_image || DEFAULT_COVER;
-  const quantityLabel = book.quantity > 1 ? `${book.quantity} copies` : book.quantity === 1 ? '1 copy' : 'Out of stock';
-  const borrowActionDisabled = !book.is_available || book.quantity <= 0 || borrowingStatus === 'approved' || borrowingStatus === 'pending';
-
-  const allDetailItems = [
-    { label: "Genre", value: genreNames, iconName: "tag-multiple-outline" },
-    { label: "Availability", value: book.is_available ? 'Available' : 'Unavailable', iconName: "check-circle-outline" },
-    { label: "Copies", value: quantityLabel, iconName: "book-multiple-outline" },
-    book.publisher && { label: "Publisher", value: book.publisher, iconName: "domain" },
-    book.publish_date && { label: "Published", value: formatDate(book.publish_date), iconName: "calendar-month-outline" },
-    book.language && { label: "Language", value: book.language, iconName: "translate" },
-    book.page_count && { label: "Pages", value: book.page_count.toString(), iconName: "book-open-page-variant-outline" },
-    book.isbn_13 && { label: "ISBN-13", value: book.isbn_13, iconName: "barcode-scan" },
-    book.isbn_10 && { label: "ISBN-10", value: book.isbn_10, iconName: "barcode" },
-    book.open_library_id && { label: "OpenLibrary ID", value: book.open_library_id, iconName: "library" },
-    { label: "Total Borrows", value: (book.total_borrows || 0).toString(), iconName: "chart-line-variant" },
-  ].filter(Boolean); 
-
-  const visibleDetails = detailsExpanded ? allDetailItems : allDetailItems.slice(0, MAX_INITIAL_DETAILS);
+  const displayData = bookDetails || initialBookData;
+  const coverImageUri = displayData?.cover_image || DEFAULT_COVER;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.screenContainer}>
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={fetchAllBookData} />}
       >
-        <Image source={{ uri: coverImageUrl }} style={styles.coverImage} />
-
-        <View style={styles.mainInfoContainer}>
-          <View style={styles.titleAuthorSection}>
-              <Text style={styles.title}>{book.title || 'No Title'}</Text>
-              <Text style={styles.author}>by {authorName}</Text>
-          </View>
-          <TouchableOpacity onPress={handleFavoriteToggle} disabled={isTogglingFavorite} style={styles.favoriteButton}>
-              {isTogglingFavorite ? (
-                  <ActivityIndicator size="small" color="#e53e3e" />
-              ) : (
-                  <Ionicons name={isFavorite ? 'heart' : 'heart-outline'} size={30} color={isFavorite ? '#e53e3e' : '#A0AEC0'} />
-              )}
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Book Details</Text>
-          {visibleDetails.map((item, index) => (
-            <DetailItem key={index} label={item.label} value={item.value} iconName={item.iconName} />
-          ))}
-          {allDetailItems.length > MAX_INITIAL_DETAILS && (
-            <TouchableOpacity onPress={() => setDetailsExpanded(!detailsExpanded)}>
-              <Text style={styles.toggleText}>
-                {detailsExpanded ? 'See less details' : 'See more details'}
+        {displayData ? (
+          <>
+            <View style={styles.headerSection}>
+              <Image 
+                source={{ uri: coverImageUri }} 
+                style={styles.coverImage} 
+                onError={(e) => console.log("Image load error:", e.nativeEvent.error, "URI:", coverImageUri)}
+              />
+              <Text style={styles.title}>{displayData.title || 'Title Not Available'}</Text>
+              <Text style={styles.authors}>
+                by {displayData.authors?.map(author => author.name).join(', ') || 'Unknown Author'}
               </Text>
-            </TouchableOpacity>
-          )}
-        </View>
+            </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Summary</Text>
-          <ExpandableText
-            text={book.summary || 'No summary provided.'}
-            style={styles.summary}
-            numberOfLines={5} 
-            seeMoreStyle={styles.toggleText}
-            seeLessStyle={styles.toggleText}
-          />
-        </View>
+            {error && <Text style={styles.errorTextSmall}>{error}</Text>}
+
+            <View style={styles.detailsSection}>
+              <Text style={styles.sectionTitle}>Book Information</Text>
+              <DetailItem label="ISBN" value={displayData.isbn} iconName="barcode-scan" />
+              <DetailItem label="Publisher" value={displayData.publisher} iconName="office-building" />
+              <DetailItem label="Published" value={formatDate(displayData.publication_date)} iconName="calendar-month" />
+              <DetailItem label="Edition" value={displayData.edition} iconName="book-edit-outline" />
+              <DetailItem label="Pages" value={displayData.page_count} iconName="book-open-page-variant-outline" />
+              <DetailItem 
+                label="Categories" 
+                value={displayData.categories?.map(cat => cat.name)} // Pass as array
+                iconName="shape-outline" 
+              />
+              {/* available_copies_count comes from the BookSerializer directly */}
+              <DetailItem label="Copies Available" value={displayData.available_copies_count} iconName="check-circle-outline" />
+              <DetailItem label="Total Borrows" value={displayData.total_borrows} iconName="swap-horizontal-bold" />
+            </View>
+            
+            {displayData.description && (
+                <View style={styles.detailsSection}>
+                    <Text style={styles.sectionTitle}>Description</Text>
+                    <ExpandableText text={displayData.description} style={styles.summary} />
+                </View>
+            )}
+          </>
+        ) : (
+          <View style={styles.loadingContainer}><Text>Loading book details...</Text></View>
+        )}
+        <View style={{ height: 80 }} /> 
       </ScrollView>
-
       <View style={styles.fixedActionContainer}>
-          {isLoadingStatus ? (
-            <ActivityIndicator size="large" color="#4A90E2" />
-          ) : borrowingStatus === 'pending' ? (
-            <TouchableOpacity
-              style={[styles.buttonBase, styles.cancelButton, isCancelling && styles.buttonDisabled]}
-              onPress={cancelBorrow}
-              disabled={isCancelling}>
-              {isCancelling ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Cancel Borrow Request</Text>}
-            </TouchableOpacity>
-          ) : borrowingStatus === 'approved' ? (
-            <TouchableOpacity style={[styles.buttonBase, styles.buttonDisabled]} disabled={true}>
-              <Text style={styles.buttonText}>Currently Borrowing</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.buttonBase, styles.borrowButton, borrowActionDisabled && styles.buttonDisabled]}
-              onPress={handleBorrow}
-              disabled={borrowActionDisabled}>
-              <Text style={styles.buttonText}>
-                {!book.is_available || book.quantity <= 0 ? 'Unavailable' : 'Borrow This Book'}
-              </Text>
-            </TouchableOpacity>
-          )}
+        {renderActionButton()}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenContainer: {
+    flex: 1,
+    backgroundColor: '#f4f6f9',
+  },
   container: {
+    paddingBottom: Platform.OS === 'ios' ? 20 : 10, 
+  },
+  loadingContainer: {
     flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 80,
-  },
-  centered: {
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f4f6f9',
   },
-  coverImage: {
-    width: '100%',
-    height: 320,
-    resizeMode: 'cover',
-    backgroundColor: '#e2e8f0',
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
-  mainInfoContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+  errorText: {
+    fontSize: 16,
+    color: 'red',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  errorTextSmall: {
+    fontSize: 14,
+    color: 'red',
+    textAlign: 'center',
+    marginVertical: 10,
     paddingHorizontal: 20,
-    paddingVertical: 15,
+  },
+  retryButton: {
+    backgroundColor: '#1976d2',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  headerSection: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 15,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: '#e0e0e0',
   },
-  titleAuthorSection: {
-    flex: 1,
-    marginRight: 10,
+  coverImage: {
+    width: 180,
+    height: 270,
+    borderRadius: 12,
+    marginBottom: 15,
+    backgroundColor: '#e0e0e0',
   },
   title: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#1e293b',
-    marginBottom: 4,
+    textAlign: 'center',
+    color: '#2c3e50',
+    marginBottom: 5,
   },
-  author: {
+  authors: {
     fontSize: 16,
-    color: '#475569',
+    color: '#7f8c8d',
+    textAlign: 'center',
+    marginBottom: 10,
   },
-  favoriteButton: {
-    padding: 8,
-  },
-  section: {
-    marginTop: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+  detailsSection: {
+    marginTop: 15,
+    marginHorizontal: 15,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 15,
+    shadowColor: "#000",
+    shadowOffset: {
+        width: 0,
+        height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2.22,
+    elevation: 3,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#334155',
+    color: '#34495e',
     marginBottom: 12,
+    paddingBottom: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ecf0f1',
   },
   detailItemContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'flex-start', 
     marginBottom: 10,
+    paddingVertical: 2,
   },
   detailIcon: {
     marginRight: 10,
-    marginTop: Platform.OS === 'ios' ? 1 : 3,
+    marginTop: Platform.OS === 'ios' ? 1 : 4, 
   },
   label: {
     fontWeight: '500',
-    color: '#475569',
+    color: '#4A5568', 
     fontSize: 15,
     marginRight: 6,
+    width: Platform.OS === 'ios' ? 120 : 110
   },
   value: {
-    color: '#1e293b',
+    color: '#1E293B', 
     fontSize: 15,
-    flexShrink: 1,
+    flex: 1,
     lineHeight: 20,
   },
   summary: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#334155',
-  },
-  toggleText: {
-    color: '#3b82f6',
-    fontWeight: '600',
-    marginTop: 8,
-    fontSize: 14,
+    color: '#334155', 
   },
   fixedActionContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     paddingVertical: Platform.OS === 'ios' ? 20 : 15,
     paddingHorizontal: 20,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#f8fafc', 
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
   },
-  buttonBase: {
-    paddingVertical: 14,
-    borderRadius: 10,
+  actionButton: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    minHeight: 50,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    minHeight: 48,
   },
-  borrowButton: {
-    backgroundColor: '#3b82f6',
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  buttonIcon: {
+    marginRight: 8,
+  },
+  requestButton: {
+    backgroundColor: '#1976d2', 
   },
   cancelButton: {
-    backgroundColor: '#ef4444',
+    backgroundColor: '#d32f2f', 
   },
-  buttonDisabled: {
-    backgroundColor: '#cbd5e1',
+  infoButtonDisabled: {
+    backgroundColor: '#757575', 
+    opacity: 0.8,
   },
-  buttonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
+  actionButtonActivity: {
+    marginVertical: 10, 
+  }
 });
-

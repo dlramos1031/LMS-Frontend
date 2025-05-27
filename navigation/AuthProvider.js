@@ -32,7 +32,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     setLoading(true);
     try {
-      const response = await apiClient.post('/auth/login/', { username, password });
+      const response = await apiClient.post('/api/auth/login/', { username, password });
       const { token: receivedToken, user: userData } = response.data;
 
       await AsyncStorage.setItem('authToken', receivedToken);
@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }) => {
         throw new Error("Passwords do not match");
       }
 
-      const response = await apiClient.post('/auth/register/', registrationData);
+      const response = await apiClient.post('/api/auth/register/', registrationData);
       const { token: receivedToken, user: userData } = response.data;
 
       // Automatically log in the user after successful registration
@@ -84,7 +84,7 @@ export const AuthProvider = ({ children }) => {
     console.log('Initiating logout...'); // Add log
     try {
       // Attempt backend logout - it's okay if this fails sometimes
-      await apiClient.post('/auth/logout/');
+      await apiClient.post('/api/auth/logout/');
       console.log('Backend logout successful (token invalidated server-side).');
     } catch (error) {
       // Log backend error but proceed with local logout

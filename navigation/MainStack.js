@@ -3,10 +3,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import TabNavigator from './TabNavigator';
 import BookDetailsScreen from '../screens/BookDetailsScreen';
 import BorrowScreen from '../screens/BorrowScreen';
+import BorrowDetailScreen from '../screens/BorrowDetailScreen';
 import YourBooksScreen from '../screens/YourBooksScreen';
 import AboutScreen from '../screens/AboutScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ScreenHeader from '../components/ScreenHeader';
+import EditProfileScreen from '../screens/EditProfileScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -54,6 +56,28 @@ export default function MainStack() {
         options={({ navigation }) => ({
           headerShown: true,
           header: () => <ScreenHeader title="Settings" navigation={navigation} />,
+        })}
+      />
+      <Stack.Screen
+        name="BorrowDetail"
+        component={BorrowDetailScreen}
+        options={({ navigation, route }) => ({
+          headerShown: true,
+          header: () => <ScreenHeader title="Borrow Details" navigation={navigation} route={route} />, 
+        })}
+      />
+      <Stack.Screen
+        name="EditProfile"
+        component={EditProfileScreen}
+        options={({ navigation }) => ({
+          headerShown: true,
+          header: () => (
+            <ScreenHeader 
+              title="Edit Profile" 
+              navigation={navigation} 
+              canGoBack={navigation.canGoBack()}
+            />
+          ),
         })}
       />
       <Stack.Screen name="YourBooksScreen" component={YourBooksScreen} />

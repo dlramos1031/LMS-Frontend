@@ -1,208 +1,198 @@
 // Frontend/screens/ProfileScreen.js
-
-import React, { useEffect, useState, useContext, useCallback } // Added useCallback
-from 'react';
+// Your existing imports
+import React, { useEffect, useState, useContext, useCallback } from 'react';
 import {
   View,
   Text,
-  TextInput,
+  // TextInput, // Will change some TextInputs to Text for display-only
   TouchableOpacity,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
   Alert,
+  Image, // Added for Profile Picture
+  RefreshControl // Added for pull-to-refresh
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context'; // Import hook
-import { AuthContext } from '../navigation/AuthProvider'; // Import AuthContext
-import apiClient from '../services/apiClient'; // Import apiClient
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AuthContext } from '../navigation/AuthProvider';
+import apiClient from '../services/apiClient';
+
+// Using a placeholder image URL
+const DEFAULT_PROFILE_PIC = 'https://via.placeholder.com/150/CCCCCC/FFFFFF?text=User';
 
 export default function ProfileScreen({ navigation }) {
-  const insets = useSafeAreaInsets(); // Get safe area insets
-  const { user: contextUser, logout } = useContext(AuthContext); // Get user from context and logout function
+  const insets = useSafeAreaInsets();
+  const { user: contextUser, logout, setAuthenticationState } = useContext(AuthContext); // Assuming setAuthenticationState can refresh context user
 
-  // Initialize profile state potentially from context, then update from API
+  // Initialize profile state with more fields, potentially from context or defaults
   const [profile, setProfile] = useState({
     username: contextUser?.username || '',
-    full_name: contextUser?.full_name || '',
+    full_name: contextUser?.full_name || '', // This will be updated from API
+    first_name: contextUser?.first_name || '',
+    last_name: contextUser?.last_name || '',
     email: contextUser?.email || '',
-    // idNumber: '', // Add if you implement idNumber in backend/serializer
+    profile_picture: contextUser?.profile_picture || null,
+    phone_number: contextUser?.phone_number || '',
+    physical_address: contextUser?.physical_address || '',
+    birth_date: contextUser?.birth_date || null,
+    borrower_id_value: contextUser?.borrower_id_value || '', // Assuming this field name from UserSerializer
+    borrower_id_label: contextUser?.borrower_id_label || 'Borrower ID',
+    borrower_type: contextUser?.borrower_type || '',
+    date_joined: contextUser?.date_joined || null,
+    // Add any other fields you expect from UserSerializer
   });
-  const [loading, setLoading] = useState(true); // Loading state for initial fetch
-  const [saving, setSaving] = useState(false); // Saving state for profile update
-  const [error, setError] = useState(null); // Error state
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false); // For pull-to-refresh
+  const [error, setError] = useState(null);
 
   // Fetch Profile Data from API
   const fetchUserProfile = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
-      console.log("Fetching profile from /api/profile/");
-      const response = await apiClient.get('/auth/profile/'); // Use the correct API endpoint
+      // console.log("Fetching profile from /api/auth/profile/");
+      const response = await apiClient.get('/api/auth/profile/'); // Correct endpoint
       if (response.data) {
-        setProfile(response.data); // Update state with data from API
-        console.log("Profile data fetched:", response.data);
-        // Optionally update AuthContext user state here if needed
+        setProfile(response.data);
+        // console.log("Profile data fetched:", response.data);
+        // Optionally update AuthContext user state here if needed and if a function is provided
+        if (setAuthenticationState) { // If your AuthProvider has a way to update the context user
+             setAuthenticationState(prev => ({...prev, user: response.data}));
+        }
       }
     } catch (err) {
-      console.error("Failed to fetch profile:", err.response || err);
-      setError("Could not load profile data.");
-      // Keep potentially existing context data on error
-      setProfile(prev => ({
-          ...prev, // Keep existing data
-          username: prev.username || contextUser?.username || '',
-          full_name: prev.full_name || contextUser?.full_name || '',
-          email: prev.email || contextUser?.email || '',
-      }));
+      console.error("Failed to fetch profile:", err.response?.data || err.message);
+      let errorMessage = "Could not load profile data. ";
+      if (err.response?.status === 401) {
+          errorMessage += "Please log in again."
+      } else if (err.response?.data?.detail) {
+          errorMessage = err.response.data.detail;
+      }
+      setError(errorMessage);
+      // Keep potentially existing context data on error if profile state is not fully overwritten
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [contextUser]); // Re-fetch if contextUser changes (e.g., after re-login)
+  }, [setAuthenticationState]); // Add dependencies if they are used inside
 
   useEffect(() => {
+    setLoading(true); // Set loading true on initial mount
     fetchUserProfile();
-  }, [fetchUserProfile]); // Fetch on mount and when fetchUserProfile changes
+  }, [fetchUserProfile]);
 
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchUserProfile();
+  }, [fetchUserProfile]);
 
-  // Handle Saving Profile Data
-  const handleSave = async () => {
-    if (!profile.full_name) { // Basic validation
-      Alert.alert('Validation Error', 'Please enter your full name');
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-    // Prepare only the data that should be updated via API
-    // Based on UserProfileSerializer read_only_fields: only 'full_name'
-    // Add other fields like 'idNumber' if you implemented them in the backend API
-    const dataToSave = {
-      full_name: profile.full_name,
-    };
-
-    try {
-      console.log("Updating profile to /api/profile/ with data:", dataToSave);
-      const response = await apiClient.patch('/auth/profile/', dataToSave);
-      setProfile(response.data);
-      Alert.alert('Success', 'Profile updated successfully');
-      console.log("Profile update successful:", response.data);
-    } catch (err) {
-       console.error("Failed to update profile:", err.response?.data || err);
-       let errorMessage = 'Could not update profile.';
-        if (err.response?.data) {
-            const errors = err.response.data;
-            const errorMessages = Object.keys(errors).map(key => `${key}: ${errors[key].join(', ')}`);
-             if (errorMessages.length > 0) {
-                errorMessage = errorMessages.join('\n');
-            } else if (errors.detail) {
-                 errorMessage = errors.detail;
-            }
-        }
-        setError(errorMessage);
-        Alert.alert('Update Error', errorMessage);
-    } finally {
-      setSaving(false);
-    }
+  const handleEditProfile = () => {
+    navigation.navigate('EditProfile', { currentUserData: profile });
   };
 
-  // Logout Handler
   const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (error) {
-      Alert.alert('Logout Error', 'An error occurred during logout.');
-      console.error('Logout error in ProfileScreen:', error);
-    }
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to log out?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Logout", 
+          onPress: async () => {
+            try {
+              await logout(); // Call logout from AuthContext
+              // Navigation to login screen is handled by RootNavigator based on user/token state
+            } catch (error) {
+              Alert.alert('Logout Error', 'An error occurred during logout.');
+              console.error('Logout error in ProfileScreen:', error);
+            }
+          },
+          style: "destructive"
+        }
+      ]
+    );
   };
+  
+  // Helper to display profile information items
+  const InfoItem = ({ label, value, iconName }) => (
+    <View style={styles.infoItemContainer}>
+      {iconName && <Ionicons name={iconName} size={20} color="#475569" style={styles.infoIcon} />}
+      <Text style={styles.label}>{label}:</Text>
+      <Text style={styles.infoValue} numberOfLines={2}>{value || 'N/A'}</Text>
+    </View>
+  );
 
-  // Render loading indicator
-  if (loading) {
+
+  if (loading && !profile.username) { // Show loader if profile is not yet populated
     return (
         <View style={[styles.container, styles.centered, { paddingTop: insets.top }]}>
-             <ActivityIndicator size="large" color="#1976d2" />
+             <ActivityIndicator size="large" color="#3b82f6" />
         </View>
     );
   }
 
   return (
-    // Apply safe area padding to the root View
     <View style={[styles.container, { paddingTop: insets.top }]}>
-        <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-        {/* Avatar Section - Placeholder remains */}
+        <ScrollView 
+          contentContainerStyle={styles.scrollContainer} 
+          keyboardShouldPersistTaps="handled"
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#3b82f6"]}/>}
+        >
         <View style={styles.avatarContainer}>
-            <TouchableOpacity onPress={() => Alert.alert('Profile picture feature coming soon')}>
-            <View style={styles.avatarMock}>
-                <Text style={styles.avatarEmoji}>👤</Text>
-                <View style={styles.editIcon}>
-                <Ionicons name="camera" size={16} color="#fff" />
-                </View>
-            </View>
-            </TouchableOpacity>
-            {/* Display username from profile state */}
-            <Text style={styles.username}>{profile.username || 'User'}</Text>
+            <Image 
+                source={{ uri: profile.profile_picture || DEFAULT_PROFILE_PIC }} 
+                style={styles.profileImageActual} // New style for actual image
+            />
+            <Text style={styles.username}>
+              {profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username || 'User'}
+            </Text>
+            <Text style={styles.profileSubtext}>@{profile.username || 'username'}</Text>
+            <Text style={styles.profileSubtext}>{profile.email || 'email@example.com'}</Text>
         </View>
 
-        {/* Display error message if fetch/save failed */}
-        {error && <Text style={styles.errorText}>{error}</Text>}
+        {error && !loading && ( // Show error only if not loading and error exists
+            <View style={styles.errorContainer}>
+                <Text style={styles.errorTextDisplay}>{error}</Text>
+            </View>
+         )}
 
-        {/* Form Section */}
+        {/* Profile Info Section - Display only */}
         <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Basic Info</Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Full Name</Text>
-              <TextInput
-                  style={styles.input}
-                  value={profile.full_name} // Use profile state
-                  onChangeText={(text) => setProfile({ ...profile, full_name: text })} // Update local state
-                  placeholder="Enter your full name"
-                  placeholderTextColor="#94a3b8"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Username (read-only)</Text>
-              <TextInput
-                style={[styles.input, styles.disabledInput]} 
-                value={profile.username}
-                editable={false} 
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email (read-only)</Text>
-              <TextInput
-                  style={[styles.input, styles.disabledInput]}
-                  value={profile.email} // Use profile state
-                  editable={false}
-              />
-            </View>
-
-            {/* Save Button */}
-            <TouchableOpacity style={[styles.saveBtn, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
-            {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveText}>Save Changes</Text> }
-            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>Personal Information</Text>
+            <InfoItem iconName="person-outline" label="Full Name" value={profile.full_name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim()} />
+            <InfoItem iconName="mail-outline" label="Email" value={profile.email} />
+            <InfoItem iconName="call-outline" label="Phone Number" value={profile.phone_number} />
+            <InfoItem iconName="home-outline" label="Address" value={profile.physical_address} />
+            <InfoItem iconName="calendar-outline" label="Birth Date" value={profile.birth_date ? new Date(profile.birth_date).toLocaleDateString() : 'N/A'} />
+        </View>
+        
+        <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Library Details</Text>
+            <InfoItem iconName="id-card-outline" label={profile.borrower_id_label || "Borrower ID"} value={profile.borrower_id_value} />
+            <InfoItem iconName="library-outline" label="Borrower Type" value={profile.borrower_type} />
+            <InfoItem iconName="enter-outline" label="Date Joined" value={profile.date_joined ? new Date(profile.date_joined).toLocaleDateString() : 'N/A'} />
         </View>
 
-        {/* Footer Actions */}
+        {/* Edit Profile Button - Replaces Save Changes */}
+        <TouchableOpacity style={styles.saveBtn} onPress={handleEditProfile}> 
+          <Ionicons name="pencil-outline" size={20} color="#fff" style={{marginRight: 10}} />
+          <Text style={styles.saveText}>Edit Profile</Text>
+        </TouchableOpacity>
+
+        {/* Footer Actions - Kept as per your original structure */}
         <View style={styles.section}>
             <Text style={styles.sectionTitle}>Account</Text>
-
-            {/* Other buttons remain the same */}
             <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.navigate('About')}>
-            <Ionicons name="information-circle-outline" size={18} color="#1e293b" />
-            <Text style={styles.secondaryText}>About</Text>
+              <Ionicons name="information-circle-outline" size={18} color="#1e293b" />
+              <Text style={styles.secondaryText}>About</Text>
             </TouchableOpacity>
-
             <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.navigate('Settings')}>
-            <Ionicons name="settings-outline" size={18} color="#1e293b" />
-            <Text style={styles.secondaryText}>Settings</Text>
+              <Ionicons name="settings-outline" size={18} color="#1e293b" />
+              <Text style={styles.secondaryText}>Settings</Text>
             </TouchableOpacity>
-
-            {/* Logout Button */}
             <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={20} color="#fff" />
-            <Text style={styles.logoutText}>Log Out</Text>
+              <Ionicons name="log-out-outline" size={20} color="#fff" />
+              <Text style={styles.logoutText}>Log Out</Text>
             </TouchableOpacity>
         </View>
         </ScrollView>
@@ -210,10 +200,12 @@ export default function ProfileScreen({ navigation }) {
   );
 }
 
-const styles = StyleSheet.create({
+// YOUR EXISTING STYLES (with minor additions/tweaks for new elements)
+// I've tried to match the color values from your provided CSS for new elements like InfoItem
+const styles = StyleSheet.create({ // Styles from your uploaded ProfileScreen.js
     container: {
         flex: 1,
-        backgroundColor: '#f8fafc',
+        backgroundColor: '#f8fafc', // Your background color
     },
     centered: {
       justifyContent: 'center',
@@ -227,35 +219,27 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginVertical: 30, 
     },
-    avatarMock: { 
-      width: 100, 
-      height: 100, 
-      borderRadius: 50,
-      backgroundColor: '#e2e8f0', 
-      alignItems: 'center', 
-      justifyContent: 'center', 
-      borderWidth: 3, 
-      borderColor: '#cbd5e1', 
-      position: 'relative' 
-    },
-    editIcon: { 
-      position: 'absolute', 
-      bottom: 0, 
-      right: 0, 
-      backgroundColor: '#3b82f6', 
-      borderRadius: 12, 
-      padding: 5, 
-      borderWidth: 2, 
-      borderColor: '#f8fafc' 
-    },
-    avatarEmoji: { 
-      fontSize: 42 
+    // Original avatarMock related styles (editIcon, avatarEmoji) are removed as we use a real image.
+    profileImageActual: { // New style for the actual profile image
+        width: 120,
+        height: 120,
+        borderRadius: 60, // Circular image
+        backgroundColor: '#e2e8f0', // Placeholder background
+        borderWidth: 3,
+        borderColor: '#3b82f6', // Your blue color for border
+        marginBottom: 10,
     },
     username: { 
       fontSize: 22, 
       fontWeight: '600', 
-      color: '#1e293b', 
-      marginTop: 12 
+      color: '#1e293b', // Your text color
+      marginTop: 12,
+      textAlign: 'center',
+    },
+    profileSubtext: { // Added for email/username below name
+        fontSize: 14,
+        color: '#64748b', // Your secondary text color
+        textAlign: 'center',
     },
     section: { 
       marginBottom: 25, 
@@ -263,10 +247,7 @@ const styles = StyleSheet.create({
       borderRadius: 12, 
       padding: 20, 
       shadowColor: "#000", 
-      shadowOffset: { 
-        width: 0, 
-        height: 1, 
-      }, 
+      shadowOffset: { width: 0, height: 1, }, 
       shadowOpacity: 0.05, 
       shadowRadius: 2.22, 
       elevation: 3, 
@@ -275,44 +256,46 @@ const styles = StyleSheet.create({
       fontSize: 18, 
       fontWeight: '600', 
       color: '#334155', 
-      marginBottom: 20, 
-      paddingBottom: 5, 
+      marginBottom: 10, // Reduced margin slightly
+      paddingBottom: 8, // Added padding
       borderBottomWidth: 1, 
       borderBottomColor: '#e2e8f0', 
     },
-    inputGroup: { 
-      marginBottom: 18, 
+    // InfoItem styles (replaces inputGroup for display)
+    infoItemContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e2e8f0', // Light border for items
     },
-    label: { 
+    infoIcon: {
+        marginRight: 12,
+    },
+    label: { // Reused for InfoItem label
       fontSize: 14, 
       fontWeight: '500', 
       color: '#475569', 
-      marginBottom: 8, 
+      width: 120, // Fixed width for labels for alignment
     },
-    input: { 
-      borderWidth: 1, 
-      borderColor: '#cbd5e1', 
-      borderRadius: 8, 
-      padding: 12, 
-      fontSize: 16, 
-      backgroundColor: '#f8fafc', 
-      color: '#1e293b', 
+    infoValue: { // For displaying profile values
+      fontSize: 14,
+      color: '#1e293b', // Your primary text color
+      flex: 1, // Take remaining space
+      textAlign: 'left',
     },
-    disabledInput: { 
-      backgroundColor: '#e2e8f0', 
-      color: '#64748b', 
-    },
-    saveBtn: { 
-      backgroundColor: '#3b82f6', 
+    // inputGroup, input, disabledInput are removed as inline editing is removed for this screen
+    saveBtn: { // This style is now used for "Edit Profile" button
+      backgroundColor: '#3b82f6', // Your blue color
       paddingVertical: 14, 
       borderRadius: 8, 
       alignItems: 'center', 
-      marginTop: 10, 
+      marginVertical: 20,
       flexDirection: 'row', 
       justifyContent: 'center', 
       minHeight: 48, 
     },
-    saveText: { 
+    saveText: { // For "Edit Profile" button text
       color: '#fff', 
       fontSize: 16, 
       fontWeight: '600', 
@@ -346,14 +329,35 @@ const styles = StyleSheet.create({
     logoutText: { 
       color: '#fff', 
       fontWeight: '600', 
-      fontSize: 16, },
-    buttonDisabled: { 
-      backgroundColor: '#93c5fd', 
+      fontSize: 16, 
     },
-    errorText: { 
-      color: 'red',
+    // buttonDisabled is removed as saving state is removed for this screen
+    errorContainer: { // Your existing style
+      backgroundColor: '#fff0f0', // Light red for error background
+      padding: 15,
+      marginHorizontal: 0, // Adjusted to be full width within scroll content padding
+      borderRadius: 8,
+      alignItems: 'center',
+      marginBottom: 15, // Space below error message
+    },
+    errorTextDisplay: { // Renamed from errorText to avoid conflict if you add specific error styling later
       textAlign: 'center',
-      marginBottom: 15,
-      paddingHorizontal: 10,
+      color: '#d9534f', // Your error text color
+      fontSize: 14,
+    },
+    // retryButton, retryButtonText are removed as error handling is simplified to display message
+    // loader style is kept for the main loading indicator
+    loader: { 
+      marginTop: 50,
+    },
+    emptyContainer: { // Your existing style
+      alignItems: 'center',
+      marginTop: 50,
+      paddingHorizontal: 20,
+    },
+    emptyText: { // Your existing style
+      textAlign: 'center',
+      fontSize: 16,
+      color: '#888',
     }
 });

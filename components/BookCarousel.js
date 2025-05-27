@@ -15,7 +15,7 @@ export default function BookCarousel({ filter, queryText = '', onBookPress }) {
   const fetchBooks = useCallback(async () => {
     setLoading(true);
     setError(null);
-    let url = '/books/';
+    let url = '/api/books/';
     const params = {};
 
     if (filter === 'search' && queryText) {
@@ -82,7 +82,7 @@ export default function BookCarousel({ filter, queryText = '', onBookPress }) {
       ) : books.length > 0 ? (
         <FlatList
           data={books}
-          keyExtractor={item => item.id.toString()}
+          keyExtractor={item => item.isbn}
           renderItem={renderItem}
           horizontal
           showsHorizontalScrollIndicator={false}

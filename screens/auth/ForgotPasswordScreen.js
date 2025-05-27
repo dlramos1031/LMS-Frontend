@@ -1,163 +1,212 @@
+// LMS/Frontend/screens/auth/ForgotPasswordScreen.js
 import React, { useState } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   StyleSheet,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert,
+  Keyboard,
+  TouchableWithoutFeedback
 } from 'react-native';
-import apiClient from '../../services/apiClient'; 
+import { Ionicons } from '@expo/vector-icons'; // For back button icon, if needed
+import apiClient from '../../services/apiClient'; // Adjust path if needed
 
-export default function ForgotPasswordScreen({ navigation }) {
+// Define colors directly as per your preference to avoid colors.js
+const THEME_BLUE = '#3b82f6'; // Using the blue from ProfileScreen's saveBtn
+const WHITE = '#fff';
+const INPUT_BG_COLOR = '#f8fafc';
+const INPUT_BORDER_COLOR = '#cbd5e1';
+const TEXT_COLOR_PRIMARY = '#1e293b';
+const TEXT_LABEL_COLOR = '#475569';
+const SCREEN_BG_COLOR = '#f4f6f8';
+const ERROR_COLOR = '#ef4444'; // Red for errors
+const SUCCESS_COLOR = '#10B981'; // Green for success messages
+
+const ForgotPasswordScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false); // Local loading state
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
-  const handleReset = async () => {
-    if (!email) {
-      Alert.alert('Error', 'Please enter your email address.');
+  const handlePasswordResetRequest = async () => {
+    Keyboard.dismiss();
+    if (!email.trim()) {
+      setError('Please enter your email address.');
       return;
     }
+    // Basic email format validation (optional, as backend will validate too)
+    const emailRegex = /\S+@\S+\.\S+/;
+    if (!emailRegex.test(email)) {
+        setError('Please enter a valid email address.');
+        return;
+    }
 
-    setIsSubmitting(true);
+    setLoading(true);
+    setMessage('');
+    setError('');
+
     try {
-      // Call the Django backend endpoint provided by django-rest-passwordreset
-      const response = await apiClient.post('/auth/password_reset/', { email });
-
-      // Check for successful response (django-rest-passwordreset usually returns 200 OK)
-      if (response.status === 200) {
-          Alert.alert(
-            'Success',
-            'If an account with that email exists, a password reset link has been sent.'
-          );
-          if (navigation.canGoBack()) {
-            navigation.goBack(); // Go back to login screen
-          }
-      } else {
-          // Handle unexpected successful status codes if necessary
-           Alert.alert('Notice', response.data?.detail || 'Request processed.');
-      }
-
-    } catch (error) {
-        // Handle errors (e.g., validation errors, server issues)
-        let errorMessage = 'Failed to send reset link. Please try again.';
-         if (error.response?.data) {
-            const errors = error.response.data;
-            // Extract specific field errors or detail message
-             if (errors.email && Array.isArray(errors.email)) {
-                 errorMessage = `Email: ${errors.email.join(', ')}`;
-             } else if (errors.detail) {
-                 errorMessage = errors.detail;
-             } else {
-                 // Handle non-field errors or other formats if needed
-                 const errorMessages = Object.keys(errors).map(key => `${key}: ${errors[key]}`);
-                 if(errorMessages.length > 0) errorMessage = errorMessages.join('\n');
+      // The endpoint for django-rest-passwordreset to request a token
+      await apiClient.post('/api/auth/password_reset/', { email });
+      
+      setMessage(
+        'If an account with that email exists, password reset instructions ' +
+        'have been processed. For development, please check your Django console ' +
+        'for the reset email content and link.'
+      );
+      setEmail(''); // Clear the input field on success
+    } catch (err) {
+      console.error('Password Reset Request Failed:', err.response?.data || err.message);
+      if (err.response?.data && typeof err.response.data === 'object') {
+        // django-rest-passwordreset might return a 200 OK even if email not found
+        // if DJANGO_REST_PASSWORDRESET_NO_INFORMATION_ON_SUCCESS = True (default)
+        // In this case, the success message is appropriate.
+        // If it returns an error (e.g. 400 for malformed email, or if configured to show email not found errors)
+        let errorDetail = 'An unexpected error occurred. Please try again.';
+        if (err.response.data.email && Array.isArray(err.response.data.email)) {
+            errorDetail = err.response.data.email.join(' ');
+        } else if (typeof err.response.data.detail === 'string') {
+            errorDetail = err.response.data.detail;
+        } else {
+            // Flatten other potential DRF error structures
+             const errors = err.response.data;
+             const errorMessages = Object.entries(errors).map(([key, value]) => {
+                 if (Array.isArray(value)) {
+                     return `${key}: ${value.join(', ')}`;
+                 }
+                 return `${key}: ${String(value)}`;
+             });
+             if (errorMessages.length > 0) {
+                 errorDetail = errorMessages.join('\n');
              }
-        } else if(error.message) {
-            errorMessage = error.message;
         }
-        Alert.alert('Error', errorMessage);
-        console.error('Password Reset Error:', error.response || error);
+        setError(errorDetail);
+      } else {
+        setError('Failed to request password reset. Please check your network and try again.');
+      }
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Reset Your Password</Text>
-      <Text style={styles.subtitle}>
-        Enter your registered email to receive a password reset link.
-      </Text>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={styles.container}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back-outline" size={28} color={THEME_BLUE} />
+        </TouchableOpacity>
 
-      <TextInput
-        placeholder="Email"
-        placeholderTextColor="#999"
-        style={styles.input}
-        onChangeText={setEmail}
-        value={email}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
+        <Text style={styles.title}>Reset Password</Text>
+        <Text style={styles.subtitle}>
+          Enter your email address below. If an account exists, instructions will be sent to the Django console (for development).
+        </Text>
 
-      {/* Updated Button */}
-      <TouchableOpacity
-        style={[styles.button, isSubmitting && styles.buttonDisabled]}
-        onPress={handleReset}
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Send Reset Link</Text>
-        )}
-      </TouchableOpacity>
+        {message && <Text style={styles.successMessage}>{message}</Text>}
+        {error && <Text style={styles.errorMessage}>{error}</Text>}
 
-      <TouchableOpacity onPress={() => navigation.canGoBack() && navigation.goBack()}>
-        <Text style={styles.link}>Back to Login</Text>
-      </TouchableOpacity>
-    </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter your email"
+          placeholderTextColor="#94a3b8"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={email}
+          onChangeText={setEmail}
+          editable={!loading}
+        />
+
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handlePasswordResetRequest}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color={WHITE} />
+          ) : (
+            <Text style={styles.buttonText}>Send Reset Instructions</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </TouchableWithoutFeedback>
   );
-}
+};
 
-// Styles updated slightly
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-    backgroundColor: '#f5f7fa',
+    backgroundColor: SCREEN_BG_COLOR, // '#f4f6f8'
+    paddingHorizontal: 24,
+    justifyContent: 'center', // Center content vertically
+  },
+  backButton: {
+    position: 'absolute',
+    top: 30, // Adjust for status bar
+    left: 20,
+    padding: 10,
+    zIndex: 10, // Ensure it's tappable
   },
   title: {
-    fontSize: 26,
-    fontWeight: '700',
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: TEXT_COLOR_PRIMARY, // '#1e293b'
     textAlign: 'center',
-    marginBottom: 10,
-    color: '#1a1a1a',
+    marginBottom: 15,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 15,
+    color: TEXT_LABEL_COLOR, // '#475569'
     textAlign: 'center',
     marginBottom: 30,
+    lineHeight: 22,
   },
   input: {
-    backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 20,
-    fontSize: 16,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: INPUT_BORDER_COLOR, // '#cbd5e1'
+    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 15,
+    fontSize: 16,
+    backgroundColor: INPUT_BG_COLOR, // '#f8fafc'
+    color: TEXT_COLOR_PRIMARY, // '#1e293b'
+    marginBottom: 20,
   },
   button: {
-    backgroundColor: '#1976d2',
-    paddingVertical: 14,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 2,
-    marginBottom: 20,
-    flexDirection: 'row', // For indicator alignment
-    justifyContent: 'center', // For indicator alignment
-    alignItems: 'center', // For indicator alignment
-    minHeight: 50, // Ensure height for indicator
+    backgroundColor: THEME_BLUE, // '#3b82f6'
+    paddingVertical: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 50,
   },
   buttonDisabled: {
-    backgroundColor: '#a0c3e2', // Lighter color when disabled
+    backgroundColor: '#93c5fd', // Lighter blue
   },
   buttonText: {
-    color: '#fff',
-    fontWeight: '600',
+    color: WHITE, // '#fff'
     fontSize: 16,
-    textAlign: 'center',
+    fontWeight: '600',
   },
-  link: {
-    color: '#1976d2',
-    fontSize: 15,
-    fontWeight: '500',
+  successMessage: {
+    color: SUCCESS_COLOR, // Green
+    fontSize: 14,
     textAlign: 'center',
+    marginBottom: 15,
+    padding: 10,
+    backgroundColor: SUCCESS_COLOR + '20', // Light green background
+    borderRadius: 6,
+  },
+  errorMessage: {
+    color: ERROR_COLOR, // Red
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 15,
+    padding: 10,
+    backgroundColor: ERROR_COLOR + '15', // Light red background
+    borderRadius: 6,
   },
 });
+
+export default ForgotPasswordScreen;

@@ -1,23 +1,21 @@
 import React, { useState, useCallback, useContext } from 'react';
 import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native'; // useNavigation import removed as navigation prop is used
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import apiClient from '../services/apiClient'; 
-import { AuthContext } from '../navigation/AuthProvider'; 
+import apiClient from '../services/apiClient'; //
+import { AuthContext } from '../navigation/AuthProvider'; //
 
 const DEFAULT_COVER = 'https://via.placeholder.com/150/CCCCCC/FFFFFF?text=No+Cover';
 
-export default function YourBooksScreen() {
+export default function YourBooksScreen({ navigation }) { //
   const [current, setCurrent] = useState([]); 
   const [history, setHistory] = useState([]); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('current'); 
-  const [cancellingBookId, setCancellingBookId] = useState(null); 
 
-  const navigation = useNavigation();
   const insets = useSafeAreaInsets(); 
-  const { token } = useContext(AuthContext); 
+  const { token } = useContext(AuthContext); //
 
   const fetchBorrowedBooks = useCallback(async () => {
     if (!token) {
@@ -32,96 +30,68 @@ export default function YourBooksScreen() {
     setError(null); 
 
     try {
-      console.log("Fetching borrowed books from API endpoint: /borrow/");
-      const response = await apiClient.get('/borrow/'); 
-      const allBorrowed = response.data || [];
-      const currentBorrowed = [];
-      const pastBorrowed = [];
+      // CORRECTED API ENDPOINT
+      const response = await apiClient.get('/api/borrowings/'); //
+      
+      const allBorrowings = response.data;
+      // Filtering logic based on your backend status choices for Borrowing model
+      const currentBooks = allBorrowings.filter(
+        item => ['REQUESTED', 'ACTIVE', 'OVERDUE', 'PENDING_RETURN'].includes(item.status)
+      );
+      const historyBooks = allBorrowings.filter(
+        item => ['RETURNED', 'RETURNED_LATE', 'CANCELLED', 'REJECTED', 'LOST_BY_BORROWER'].includes(item.status)
+      );
+      setCurrent(currentBooks);
+      setHistory(historyBooks);
 
-      allBorrowed.forEach((item) => {
-        console.log("Book:", item.book.title, ", Status:", item.status, ", Return Date:", item.actual_return_date);
-        if ((item.status === 'pending' || item.status === 'approved') && item.actual_return_date === null) {
-            currentBorrowed.push(item);
-        }
-        else {
-            pastBorrowed.push(item);
-        }
-      });
-
-      setCurrent(currentBorrowed);
-      setHistory(pastBorrowed);
-      console.log("Fetched current:", currentBorrowed.length, "Fetched history:", pastBorrowed.length);
-
-    } catch (err) {
-      console.error('Error fetching borrowed books:', err.response?.data || err.message);
-      setError("Failed to load borrowed books. Please try again.");
-      setCurrent([]);
-      setHistory([]);
+    } catch (e) {
+      console.error("Failed to fetch borrowed books:", e.response?.data || e.message);
+      let errorMessage = 'Failed to load your books. Please try again.';
+      if (e.response?.data?.detail) {
+          errorMessage = e.response.data.detail;
+      } else if (e.message) {
+          errorMessage = e.message;
+      }
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [token]); 
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {
-      console.log("YourBooksScreen focused, fetching data...");
       fetchBorrowedBooks();
     }, [fetchBorrowedBooks]) 
   );
 
-  const cancelBorrowRequest = async (borrowingId) => {
-    if (!borrowingId) return;
-
-    // Confirm cancel request
-    Alert.alert(
-        "Cancel Request",
-        "Are you sure you want to cancel this borrow request?",
-        [
-            { text: "No", style: "cancel" },
-            {
-                text: "Yes",
-                onPress: async () => {
-                    setCancellingBookId(borrowingId);
-                    setError(null);
-                    try {
-                        console.log(`Attempting DELETE to /borrow/${borrowingId}/cancel-request/`);
-                        await apiClient.delete(`/borrow/${borrowingId}/cancel-request/`);
-                        Alert.alert('Success', 'Borrow request cancelled successfully.');
-                        fetchBorrowedBooks(); 
-                    } catch (error) {
-                        console.error('Error cancelling borrow request:', error.response?.data || error.message);
-                        let errorMessage = 'Could not cancel request.';
-                        if (error.response?.data?.detail) errorMessage = error.response.data.detail;
-                        else if (error.response?.data?.error) errorMessage = error.response.data.error;
-                        setError(errorMessage); 
-                        Alert.alert('Cancellation Failed', errorMessage);
-                    } finally {
-                        setCancellingBookId(null); 
-                    }
-                },
-                style: "destructive",
-            },
-        ]
-    );
+  // Corrected navigation handler
+  const handleItemPress = (borrowingItem) => {
+    if (navigation && typeof navigation.navigate === 'function') {
+      navigation.navigate('BorrowDetail', { 
+        borrowingId: borrowingItem.id,
+        // bookTitle: borrowingItem.book_copy?.book?.title // Optional, if BorrowDetail needs it for header
+      });
+    } else {
+      console.error("Navigation prop is not available or navigate is not a function.");
+      Alert.alert("Navigation Error", "Could not open details.");
+    }
   };
 
   const renderBookItem = ({ item }) => {
-    const book = item.book;
-    const bookData = book;
+    // Using your existing renderBookItem structure and styles
+    // console.log("Book Item for render: ", item); // Keep for debugging if you like
+    const bookData = item.book_copy?.book;
     const coverImageUrl = bookData?.cover_image || DEFAULT_COVER;
 
-    const formattedBorrowDate = item.borrow_date ? new Date(item.borrow_date).toLocaleDateString() : 'N/A';
+    // Using correct date fields from backend and consistent formatting
+    const formattedRequestDate = item.request_date ? new Date(item.request_date).toLocaleDateString() : 'N/A';
     const formattedDueDate = item.due_date ? new Date(item.due_date).toLocaleDateString() : 'N/A';
-    const formattedActualReturnDate = item.actual_return_date ? new Date(item.actual_return_date).toLocaleDateString() : 'N/A';
-
-    const showCancelButton = item.status === 'pending';
-    const isCurrentlyCancelling = cancellingBookId === item.id;
+    const formattedReturnDate = item.return_date ? new Date(item.return_date).toLocaleDateString() : 'N/A';
 
     return (
         <TouchableOpacity
-            style={styles.card}
-            onPress={() => navigation.navigate('BookDetailsScreen', { book })}
-            
+            style={styles.card} // Your existing style
+            onPress={() => handleItemPress(item)} // Corrected navigation call
         >
             <Image source={{ uri: coverImageUrl }} style={styles.cover} onError={(e) => console.log("Failed to load image:", e.nativeEvent.error)} />
             <View style={styles.bookDetails}>
@@ -129,31 +99,25 @@ export default function YourBooksScreen() {
                 <Text style={styles.subtitle} numberOfLines={1}>
                     by {bookData?.authors?.length > 0 ? bookData.authors.map(a => a.name).join(', ') : 'Unknown Author'}
                 </Text>
-                <Text style={styles.status}>Status: <Text style={styles.statusText(item.status)}>{item.status}</Text></Text>
-                <Text style={styles.date}>Requested: {formattedBorrowDate}</Text>
-
-                {(item.status === 'pending' || item.status === 'approved') && !item.actual_return_date &&
+                <Text style={styles.status}>Status: <Text style={styles.statusText(item.status)}>{item.status.replace('_', ' ')}</Text></Text>
+                
+                {/* Conditional Date Display - Adjusted to use correct fields */}
+                {activeTab === 'current' && item.status === 'REQUESTED' && 
+                    <Text style={styles.date}>Requested: {formattedRequestDate}</Text>}
+                
+                {activeTab === 'current' && (item.status === 'ACTIVE' || item.status === 'OVERDUE' || item.status === 'PENDING_RETURN') &&
                  <Text style={styles.date}>Due: {formattedDueDate}</Text>
                 }
-                {item.status === 'returned' && item.actual_return_date &&
-                 <Text style={styles.date}>Returned: {formattedActualReturnDate}</Text>
+
+                {activeTab === 'history' && (item.status === 'RETURNED' || item.status === 'RETURNED_LATE') &&
+                 <Text style={styles.date}>Returned: {formattedReturnDate}</Text>
                 }
-                {item.is_overdue && <Text style={styles.overdueBadge}>OVERDUE</Text>}
+                {activeTab === 'history' && (item.status === 'CANCELLED' || item.status === 'REJECTED' || item.status === 'LOST_BY_BORROWER') &&
+                 <Text style={styles.date}>Processed: {formattedRequestDate}</Text> // Using request date as a general processed date
+                }
+
+                {item.status === 'OVERDUE' && <Text style={styles.overdueBadge}>OVERDUE</Text>}
                 
-                {/* Cancel Button */}
-                {showCancelButton && (
-                    <TouchableOpacity
-                        style={[styles.cancelButton, isCurrentlyCancelling && styles.buttonDisabled]}
-                        onPress={() => cancelBorrowRequest(item.id)} 
-                        disabled={isCurrentlyCancelling}
-                    >
-                        {isCurrentlyCancelling ? (
-                            <ActivityIndicator size="small" color="#DC2626" /> 
-                        ) : (
-                            <Text style={styles.cancelButtonText}>Cancel Request</Text>
-                        )}
-                    </TouchableOpacity>
-                )}
             </View>
         </TouchableOpacity>
     );
@@ -161,15 +125,12 @@ export default function YourBooksScreen() {
   
   const activeData = activeTab === 'current' ? current : history;
 
+  // Your existing JSX for header, tabs, error display, loader, and FlatList
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-
-        {/* Header */}
         <View style={styles.header}>
              <Text style={styles.headerTitle}>Your Books</Text>
         </View>
-
-        {/* Tabs for Current/History */}
         <View style={styles.tabs}>
             <TouchableOpacity
                 style={[styles.tab, activeTab === 'current' && styles.activeTab]}
@@ -189,7 +150,6 @@ export default function YourBooksScreen() {
             </TouchableOpacity>
         </View>
 
-         {/* Error Display Area */}
          {error && !loading && (
             <View style={styles.errorContainer}>
                 <Text style={styles.errorText}>{error}</Text>
@@ -199,13 +159,12 @@ export default function YourBooksScreen() {
             </View>
          )}
 
-        {/* Loading Indicator or Book List */}
         {loading ? (
             <ActivityIndicator style={styles.loader} size="large" color="#4A90E2" />
         ) : (
             <FlatList
                 data={activeData}
-                keyExtractor={(item) => `borrow-${item.id}`}
+                keyExtractor={(item) => `borrow-${item.id.toString()}`} // Ensure key is a string
                 renderItem={renderBookItem}
                 ListEmptyComponent={
                     <View style={styles.emptyContainer}>
@@ -224,7 +183,8 @@ export default function YourBooksScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+// YOUR EXISTING STYLES - These are preserved
+const styles = StyleSheet.create({ //
   container: {
     flex: 1,
     backgroundColor: '#f4f6f8',
@@ -244,11 +204,6 @@ const styles = StyleSheet.create({
       fontSize: 20,
       fontWeight: 'bold',
       color: '#1a202c',
-  },
-  clearText: {
-    color: '#d9534f', 
-    fontWeight: '600',
-    fontSize: 14,
   },
   tabs: {
     flexDirection: 'row',
@@ -299,7 +254,7 @@ const styles = StyleSheet.create({
   },
   bookDetails: {
       flex: 1, 
-      justifyContent: 'space-between', 
+      justifyContent: 'space-between',
   },
   title: {
     fontWeight: 'bold',
@@ -312,21 +267,29 @@ const styles = StyleSheet.create({
     fontSize: 14, 
     marginBottom: 6,
   },
-  date: {
+  date: { // Style for all date displays in the item
     fontSize: 12,
     color: '#718096', 
     marginTop: 2,
+    marginBottom: 4, // Added some bottom margin for dates
   },
-  statusText: (status) => ({ 
+  status: { // Container for "Status: <actual_status>"
+    fontSize: 12,
+    color: '#718096',
+    marginTop: 2,
+    marginBottom: 4, // Added margin
+  },
+  statusText: (status) => ({ // Your dynamic style function for status text color
     fontWeight: 'bold',
     textTransform: 'capitalize',
-    color: status === 'approved' ? '#10B981' 
-         : status === 'pending' ? '#F59E0B' 
-         : status === 'returned' ? '#6B7280'
-         : status === 'rejected' ? '#EF4444' 
+    color: status === 'ACTIVE' || status === 'pending' ? '#10B981' // 'pending' in your style, API uses 'REQUESTED' or 'ACTIVE'
+         : status === 'REQUESTED' ? '#F59E0B' // Added for REQUESTED
+         : status === 'RETURNED' || status === 'RETURNED_LATE' ? '#6B7280'
+         : status === 'REJECTED' || status === 'CANCELLED' ? '#EF4444' 
+         : status === 'OVERDUE' ? '#C53030' // Moved overdue color here from badge
          : '#4B5563', 
   }),
-   overdueBadge: {
+   overdueBadge: { // You can keep this if you want a separate badge for overdue
       backgroundColor: '#C53030',
       color: '#fff',
       fontSize: 10,
@@ -337,53 +300,42 @@ const styles = StyleSheet.create({
       marginTop: 4,
       alignSelf: 'flex-start', 
   },
-  button: {
-    marginTop: 10,
-    backgroundColor: '#4a90e2',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+  errorContainer: { // Your style for error message area
+    backgroundColor: '#fff0f0',
+    padding: 15,
+    marginHorizontal: 16,
     borderRadius: 8,
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    minHeight: 36,
-    minWidth: 100, 
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  cancelButton: {
-    marginTop: 10,
-    backgroundColor: '#E53E3E', 
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    minHeight: 36,
-    minWidth: 100,
-  },
-  cancelButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  buttonDisabled: { 
-    opacity: 0.6, 
-  },
-  empty: {
-    textAlign: 'center',
-    marginTop: 50,
-    fontSize: 16,
-    color: '#888',
+    marginBottom: 10,
   },
   errorText: {
       textAlign: 'center',
-      color: 'red',
-      marginVertical: 10,
-      paddingHorizontal: 16,
+      color: '#d9534f', // Error text color
+      fontSize: 14,
+      marginBottom: 10,
   },
+  retryButton: {
+      backgroundColor: '#4a90e2',
+      paddingVertical: 8,
+      paddingHorizontal: 20,
+      borderRadius: 6,
+  },
+  retryButtonText: {
+      color: '#fff',
+      fontWeight: '600',
+      fontSize: 14,
+  },
+  loader: { // Your style for main loader
+    marginTop: 50, // Give it some space
+  },
+  emptyContainer: { // Your style for empty list message
+    alignItems: 'center',
+    marginTop: 50,
+    paddingHorizontal: 20,
+  },
+  emptyText: {
+    textAlign: 'center',
+    fontSize: 16,
+    color: '#888',
+  }
 });
